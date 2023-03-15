@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
-#if UNITY_EDITOR && UNITY_ANDROID && UNITY_2021_2_OR_NEWER
+using UnityEngine.AddressableAssets;
+#if UNITY_EDITOR && UNITY_ANDROID
 using Unity.Android.Types;
 #endif
 
@@ -59,18 +60,20 @@ namespace AddressablesPlayAssetDelivery
 
         public static string BuildProcessorDataPath
         {
-            get { return Path.Combine(BuildRootDirectory, kBuildProcessorDataFilename); }
+            get { return Path.Combine(BuildRootDirectory, Addressables.StreamingAssetsSubFolder, kBuildProcessorDataFilename); }
         }
 
         public static string CustomAssetPacksDataEditorPath
         {
-            get { return Path.Combine(BuildRootDirectory, kCustomAssetPackDataFilename); }
+            get { return Path.Combine(BuildRootDirectory, Addressables.StreamingAssetsSubFolder, kCustomAssetPackDataFilename); }
         }
 
         public static string CustomAssetPacksDataRuntimePath
         {
-            get { return Path.Combine(Application.streamingAssetsPath, kCustomAssetPackDataFilename); }
+            get { return Path.Combine(Application.streamingAssetsPath, Addressables.StreamingAssetsSubFolder, kCustomAssetPackDataFilename); }
         }
+
+        public static string CustomAssetPacksAssetsPath => $"src/main/assets/{Addressables.StreamingAssetsSubFolder}/Android";
 
 #if UNITY_EDITOR
         public static void DeleteDirectory(string directoryPath, bool onlyIfEmpty)
@@ -88,7 +91,6 @@ namespace AddressablesPlayAssetDelivery
             }
         }
 
-#if UNITY_ANDROID && UNITY_2021_2_OR_NEWER
         static readonly Dictionary<DeliveryType, AndroidAssetPackDeliveryType> k_DeliveryTypeToGradleString = new Dictionary<DeliveryType, AndroidAssetPackDeliveryType>()
         {
             { DeliveryType.InstallTime, AndroidAssetPackDeliveryType.InstallTime },
@@ -100,21 +102,6 @@ namespace AddressablesPlayAssetDelivery
         {
             return k_DeliveryTypeToGradleString[deliveryType].Name;
         }
-
-#else
-        static readonly Dictionary<DeliveryType, string> k_DeliveryTypeToGradleString = new Dictionary<DeliveryType, string>()
-        {
-            { DeliveryType.InstallTime, "install-time" },
-            { DeliveryType.FastFollow, "fast-follow" },
-            { DeliveryType.OnDemand, "on-demand" },
-        };
-
-        public static string DeliveryTypeToGradleString(DeliveryType deliveryType)
-        {
-            return k_DeliveryTypeToGradleString[deliveryType];
-        }
-
-#endif
 #endif
     }
 }

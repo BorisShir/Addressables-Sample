@@ -27,7 +27,7 @@ namespace AddressablesPlayAssetDelivery
 
         void LoadFromAssetPack(ProvideHandle providerInterface)
         {
-            string bundleName = Path.GetFileNameWithoutExtension(providerInterface.Location.InternalId);
+            string bundleName = Path.GetFileNameWithoutExtension(providerInterface.Location.InternalId.Replace("\\", "/"));
             if (!PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
             {
                 // Bundle is either assigned to the generated asset packs, or not assigned to any asset pack

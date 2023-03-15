@@ -80,9 +80,9 @@ namespace AddressablesPlayAssetDelivery
         protected override void Execute()
         {
             Addressables.ResourceManager.ResourceProviders.Add(new PlayAssetDeliveryAssetBundleProvider());
-        #if UNITY_ANDROID && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
             LoadFromAssetPacksIfAvailable();
-        #elif UNITY_ANDROID && UNITY_EDITOR
+#elif UNITY_ANDROID && UNITY_EDITOR
             LoadFromEditorData();
 #else
             CompleteOverride(null);
@@ -178,7 +178,7 @@ namespace AddressablesPlayAssetDelivery
         {
             if (location.ResourceType == typeof(IAssetBundleResource))
             {
-                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId);
+                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
                 if (PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
                 {
                     string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
@@ -186,7 +186,7 @@ namespace AddressablesPlayAssetDelivery
                     {
                         // Load bundle that was assigned to a custom fast-follow or on-demand asset pack.
                         // PlayAssetDeliveryBundleProvider.Provider previously saved the asset pack path.
-                        return Path.Combine(PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath[assetPackName], Path.GetFileName(location.InternalId));
+                        return Path.Combine(PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath[assetPackName], Addressables.StreamingAssetsSubFolder, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
                     }
                 }
             }

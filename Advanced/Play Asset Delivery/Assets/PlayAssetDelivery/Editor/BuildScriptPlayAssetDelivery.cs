@@ -147,6 +147,9 @@ namespace AddressablesPlayAssetDelivery.Editor
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, CustomAssetPackUtility.kPackContentFolderName);
             else
                 ClearBundlesInAssetsFolder();
+
+            if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}"))
+                AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, Addressables.StreamingAssetsSubFolder);
         }
 
         bool BuildPathIncludedInStreamingAssets(string buildPath)
@@ -166,6 +169,16 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             if (!AssetDatabase.IsValidFolder(path))
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.PackContentRootDirectory, folderName);
+
+            var assetNames = CustomAssetPackUtility.CustomAssetPacksAssetsPath.Split('/');
+            var assetPath = path;
+            foreach (var assetName in assetNames)
+            {
+                var newPath = Path.Combine(assetPath, assetName);
+                if (!AssetDatabase.IsValidFolder(newPath))
+                    AssetDatabase.CreateFolder(assetPath, assetName);
+                assetPath = newPath;
+            }
             return path;
         }
 
@@ -222,7 +235,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (bundleIdToEditorDataEntry.ContainsKey(entry.BundleFileId))
                     continue;
 
-                string bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId);
+                string bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
                 string bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
 
                 if (!assetPackToDataEntry.ContainsKey(assetPackName))
@@ -240,7 +253,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 // Store the bundle's build path and its corresponding .androidpack folder location
                 string bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
-                string assetsFolderPath = Path.Combine(bundlePackDir, Path.GetFileName(bundleBuildPath));
+                string assetsFolderPath = Path.Combine(bundlePackDir, CustomAssetPackUtility.CustomAssetPacksAssetsPath, Path.GetFileName(bundleBuildPath));
                 bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
             }
         }
