@@ -42,7 +42,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             get { return "Play Asset Delivery"; }
         }
 
-        static string TcfPostfix(MobileTextureSubtarget subtarget)
+        internal static string TcfPostfix(MobileTextureSubtarget subtarget)
         {
             return subtarget switch
             {
@@ -54,7 +54,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             };
         }
 
-        static MobileTextureSubtarget ConvertToMobileTextureSubtarget(TextureCompressionFormat compression)
+        internal static MobileTextureSubtarget ConvertToMobileTextureSubtarget(TextureCompressionFormat compression)
         {
             return compression switch
             {
@@ -67,11 +67,10 @@ namespace AddressablesPlayAssetDelivery.Editor
             };
         }
 
-        protected override TResult DoBuild<TResult>(AddressablesDataBuilderInput builderInput, AddressableAssetsBuildContext aaContext)
+        protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
         {
-            // Build AssetBundles
-            UnityEngine.Debug.Log("Do Build");
             var textureCompressions = PlayerSettings.Android.textureCompressionFormats;
+            CreateBuildOutputFolders(textureCompressions);
             TResult result = default(TResult);
             if (textureCompressions.Length > 1 && builderInput.Target == BuildTarget.Android)
             {
@@ -80,38 +79,33 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     EditorUserBuildSettings.androidBuildSubtarget = ConvertToMobileTextureSubtarget(textureCompressions[i]);
                     AssetDatabase.Refresh();
-                    result = base.DoBuild<TResult>(builderInput, aaContext);
-
-                    // Don't prepare content for asset packs if the build target isn't set to Android
-                    //if (builderInput.Target != BuildTarget.Android)
-                    //{
-                    //    Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
-                    //    return result;
-                    //}
-
-                    var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
-                    var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
-
-                    CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
+                    result = base.BuildDataImplementation<TResult>(builderInput);
                 }
-                EditorUserBuildSettings.androidBuildSubtarget = storedSubtarget;
             }
             else
             {
-                result = base.DoBuild<TResult>(builderInput, aaContext);
-
-                // Don't prepare content for asset packs if the build target isn't set to Android
-                if (builderInput.Target != BuildTarget.Android)
-                {
-                    Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
-                    return result;
-                }
-
-                var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
-                var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
-
-                CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
+                result = base.BuildDataImplementation<TResult>(builderInput);                
             }
+            return result;
+        }
+
+        protected override TResult DoBuild<TResult>(AddressablesDataBuilderInput builderInput, AddressableAssetsBuildContext aaContext)
+        {
+            UnityEngine.Debug.Log("Do Build");
+            // Build AssetBundles
+            TResult result = base.DoBuild<TResult>(builderInput, aaContext);
+
+            // Don't prepare content for asset packs if the build target isn't set to Android
+            if (builderInput.Target != BuildTarget.Android)
+            {
+                Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
+                return result;
+            }
+
+            var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
+            var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
+
+            CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
             return result;
         }
 
@@ -164,8 +158,6 @@ namespace AddressablesPlayAssetDelivery.Editor
             var assetPackToDataEntry = new Dictionary<string, CustomAssetPackDataEntry>();
             var bundleIdToEditorDataEntry = new Dictionary<string, BuildProcessorDataEntry>();
 
-            CreateBuildOutputFolders();
-
             foreach (AddressableAssetGroup group in settings.groups)
             {
                 if (HasRequiredSchemas(settings, group))
@@ -188,7 +180,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList());
         }
 
-        void CreateBuildOutputFolders()
+        void CreateBuildOutputFolders(TextureCompressionFormat[] textureCompressions)
         {
             // Create the 'Assets/PlayAssetDelivery/Build' directory
             if (!AssetDatabase.IsValidFolder(CustomAssetPackUtility.BuildRootDirectory))
@@ -202,8 +194,12 @@ namespace AddressablesPlayAssetDelivery.Editor
             else
                 ClearBundlesInAssetsFolder();
 
-            if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}"))
-                AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, Addressables.StreamingAssetsSubFolder);
+            foreach (var textureCompression in textureCompressions)
+            {
+                var postfix = TcfPostfix(ConvertToMobileTextureSubtarget(textureCompression));
+                if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}{postfix}"))
+                    AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+            }
         }
 
         bool BuildPathIncludedInStreamingAssets(string buildPath)
@@ -226,6 +222,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             var assetNames = CustomAssetPackUtility.CustomAssetPacksAssetsPath.Split('/');
             var assetPath = path;
+            assetNames[assetNames.Length - 1] += TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
             foreach (var assetName in assetNames)
             {
                 var newPath = Path.Combine(assetPath, assetName);
@@ -290,12 +287,13 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (bundleIdToEditorDataEntry.ContainsKey(entry.BundleFileId))
                     continue;
 
-                string bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
-                string bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
+                var bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
+                var bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
                 Debug.Log($"Create config files {entry.BundleFileId} {bundleBuildPath} {bundleName}");
 
-                string bundleFileName = Path.GetFileName(bundleBuildPath);
-                string bundleFileFolder = Path.GetDirectoryName(bundleBuildPath) + TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+                var bundleFileName = Path.GetFileName(bundleBuildPath);
+                var postfix = TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+                var bundleFileFolder = $"{Path.GetDirectoryName(bundleBuildPath)}{postfix}";
                 Directory.CreateDirectory(bundleFileFolder);
                 File.Move(bundleBuildPath, Path.Combine(bundleFileFolder, bundleFileName));
 
@@ -313,9 +311,9 @@ namespace AddressablesPlayAssetDelivery.Editor
                 }
 
                 // Store the bundle's build path and its corresponding .androidpack folder location
-                string bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
-                string assetsFolderPath = Path.Combine(bundlePackDir, CustomAssetPackUtility.CustomAssetPacksAssetsPath, Path.GetFileName(bundleBuildPath));
-                bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
+                var bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
+                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{postfix}", Path.GetFileName(bundleBuildPath));
+                bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(Path.Combine(bundleFileFolder, bundleFileName), assetsFolderPath));
             }
         }
 
@@ -336,25 +334,31 @@ namespace AddressablesPlayAssetDelivery.Editor
                     $"Only the 'build.gradle' file will be included in the Android App Bundle.");
             }
 
+#if UNITY_ANDROID
             // Create or edit the 'build.gradle' file in the .androidpack directory
             string deliveryTypeString = CustomAssetPackUtility.DeliveryTypeToGradleString(deliveryType);
             string buildFilePath = Path.Combine(androidPackDir, "build.gradle");
             string content = $"apply plugin: 'com.android.asset-pack'\n\nassetPack {{\n\tpackName = \"{assetPackName}\"\n\tdynamicDelivery {{\n\t\tdeliveryType = \"{deliveryTypeString}\"\n\t}}\n}}";
             File.WriteAllText(buildFilePath, content);
+#endif            
         }
 
         void SerializeBuildProcessorData(List<BuildProcessorDataEntry> entries)
         {
             var customPackEditorData = new BuildProcessorData(entries);
             string contents = JsonUtility.ToJson(customPackEditorData);
-            File.WriteAllText(CustomAssetPackUtility.BuildProcessorDataPath, contents);
+            var postfix = TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+            var jsonPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kBuildProcessorDataFilename);
+            File.WriteAllText(jsonPath, contents);
         }
 
         void SerializeCustomAssetPacksData(List<CustomAssetPackDataEntry> entries)
         {
             var customPackData = new CustomAssetPackData(entries);
             string contents = JsonUtility.ToJson(customPackData);
-            File.WriteAllText(CustomAssetPackUtility.CustomAssetPacksDataEditorPath, contents);
+            var postfix = TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+            var jsonPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
+            File.WriteAllText(jsonPath, contents);
         }
     }
 }
