@@ -15,6 +15,10 @@ namespace AddressablesPlayAssetDelivery
 
         public void OnButtonClicked()
         {
+            var obj1 = GameObject.Find("Cylinder");
+            var texture1 = obj1.GetComponent<Renderer>().material.mainTexture as Texture2D;
+            UnityEngine.Debug.Log($"Cylinder texture compression {texture1.format}");
+
             if (isLoading)
                 Debug.LogError("Loading operation currently in progress.");
             else if (!isLoading)
@@ -26,6 +30,9 @@ namespace AddressablesPlayAssetDelivery
                 }
                 else
                 {
+                    var texture = obj.GetComponent<Renderer>().material.mainTexture as Texture2D;
+                    UnityEngine.Debug.Log($"Object texture compression {texture.format}");
+
                     // Unload the object
                     Addressables.ReleaseInstance(obj);
                     obj = null;

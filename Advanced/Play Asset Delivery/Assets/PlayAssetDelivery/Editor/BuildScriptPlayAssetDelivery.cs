@@ -42,22 +42,76 @@ namespace AddressablesPlayAssetDelivery.Editor
             get { return "Play Asset Delivery"; }
         }
 
+        static string TcfPostfix(MobileTextureSubtarget subtarget)
+        {
+            return subtarget switch
+            {
+                MobileTextureSubtarget.ETC => "#tcf_etc1",
+                MobileTextureSubtarget.ETC2 => "#tcf_etc2",
+                MobileTextureSubtarget.ASTC => "#tcf_astc",
+                MobileTextureSubtarget.PVRTC => "#tcf_pvrtc",
+                MobileTextureSubtarget.DXT => "#tcf_dxt1"
+            };
+        }
+
+        static MobileTextureSubtarget ConvertToMobileTextureSubtarget(TextureCompressionFormat compression)
+        {
+            return compression switch
+            {
+                TextureCompressionFormat.ETC => MobileTextureSubtarget.ETC,
+                TextureCompressionFormat.ETC2 => MobileTextureSubtarget.ETC2,
+                TextureCompressionFormat.ASTC => MobileTextureSubtarget.ASTC,
+                TextureCompressionFormat.PVRTC => MobileTextureSubtarget.PVRTC,
+                TextureCompressionFormat.DXTC => MobileTextureSubtarget.DXT,
+                TextureCompressionFormat.DXTC_RGTC => MobileTextureSubtarget.DXT
+            };
+        }
+
         protected override TResult DoBuild<TResult>(AddressablesDataBuilderInput builderInput, AddressableAssetsBuildContext aaContext)
         {
             // Build AssetBundles
-            TResult result = base.DoBuild<TResult>(builderInput, aaContext);
-
-            // Don't prepare content for asset packs if the build target isn't set to Android
-            if (builderInput.Target != BuildTarget.Android)
+            UnityEngine.Debug.Log("Do Build");
+            var textureCompressions = PlayerSettings.Android.textureCompressionFormats;
+            TResult result = default(TResult);
+            if (textureCompressions.Length > 1 && builderInput.Target == BuildTarget.Android)
             {
-                Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
-                return result;
+                var storedSubtarget = EditorUserBuildSettings.androidBuildSubtarget;
+                for (int i = textureCompressions.Length - 1; i >= 0; --i)
+                {
+                    EditorUserBuildSettings.androidBuildSubtarget = ConvertToMobileTextureSubtarget(textureCompressions[i]);
+                    AssetDatabase.Refresh();
+                    result = base.DoBuild<TResult>(builderInput, aaContext);
+
+                    // Don't prepare content for asset packs if the build target isn't set to Android
+                    //if (builderInput.Target != BuildTarget.Android)
+                    //{
+                    //    Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
+                    //    return result;
+                    //}
+
+                    var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
+                    var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
+
+                    CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
+                }
+                EditorUserBuildSettings.androidBuildSubtarget = storedSubtarget;
             }
+            else
+            {
+                result = base.DoBuild<TResult>(builderInput, aaContext);
 
-            var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
-            var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
+                // Don't prepare content for asset packs if the build target isn't set to Android
+                if (builderInput.Target != BuildTarget.Android)
+                {
+                    Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
+                    return result;
+                }
 
-            CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
+                var resetAssetPackSchemaData = !CustomAssetPackSettings.SettingsExists;
+                var customAssetPackSettings = CustomAssetPackSettings.GetSettings(true);
+
+                CreateCustomAssetPacks(aaContext.Settings, customAssetPackSettings, resetAssetPackSchemaData);
+            }
             return result;
         }
 
@@ -222,8 +276,9 @@ namespace AddressablesPlayAssetDelivery.Editor
                 }
                 return false;
             }
-            if (assetPack.DeliveryType == DeliveryType.InstallTime)
-                return false;
+            // Here we are skipping install-time addressables
+            //if (assetPack.DeliveryType == DeliveryType.InstallTime)
+            //    return false;
 
             return true;
         }
@@ -237,6 +292,12 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 string bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
                 string bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
+                Debug.Log($"Create config files {entry.BundleFileId} {bundleBuildPath} {bundleName}");
+
+                string bundleFileName = Path.GetFileName(bundleBuildPath);
+                string bundleFileFolder = Path.GetDirectoryName(bundleBuildPath) + TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+                Directory.CreateDirectory(bundleFileFolder);
+                File.Move(bundleBuildPath, Path.Combine(bundleFileFolder, bundleFileName));
 
                 if (!assetPackToDataEntry.ContainsKey(assetPackName))
                 {

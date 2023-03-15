@@ -58,6 +58,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                     foreach (BuildProcessorDataEntry entry in data.Entries)
                     {
                         string assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
+                        Debug.Log($"Moving from {entry.BundleBuildPath} to {assetsFolderPath}");
                         if (File.Exists(entry.BundleBuildPath))
                         {
                             string metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);

@@ -92,8 +92,14 @@ namespace AddressablesPlayAssetDelivery
 
         void LoadFromAssetPacksIfAvailable()
         {
+            Debug.Log($"LoadFromAssetPacksIfAvailable");
+
+            // Downloading core asset packs is required to make sure that CustomAssetPacksDataRuntimePath file is available
+            // we can leave this logic, but if this file goes to TC asset pack, then it always would be "install-time"
             if (AndroidAssetPacks.coreUnityAssetPacksDownloaded)
             {
+                Debug.Log("CoreUnityAssetPacksDownloaded");
+
                 // Core Unity asset packs use install-time delivery and are already installed.
                 DownloadCustomAssetPacksData();
             }
@@ -179,14 +185,18 @@ namespace AddressablesPlayAssetDelivery
             if (location.ResourceType == typeof(IAssetBundleResource))
             {
                 string bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
+                Debug.Log($"AppBundleTransformFunc looking for bundle '{bundleName}'");
                 if (PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
                 {
                     string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
+                    Debug.Log($"AppBundleTransformFunc looking for assetPack '{assetPackName}'");
                     if (PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.ContainsKey(assetPackName))
                     {
                         // Load bundle that was assigned to a custom fast-follow or on-demand asset pack.
                         // PlayAssetDeliveryBundleProvider.Provider previously saved the asset pack path.
-                        return Path.Combine(PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath[assetPackName], Addressables.StreamingAssetsSubFolder, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
+                        var ret = Path.Combine(PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath[assetPackName], Addressables.StreamingAssetsSubFolder, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
+                        Debug.Log($"AppBundleTransformFunc returns '{ret}'");
+                        return ret;
                     }
                 }
             }
