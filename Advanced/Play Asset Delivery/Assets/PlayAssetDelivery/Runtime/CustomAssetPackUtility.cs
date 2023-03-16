@@ -91,6 +91,7 @@ namespace AddressablesPlayAssetDelivery
             }
         }
 
+#if UNITY_ANDROID
         static readonly Dictionary<DeliveryType, AndroidAssetPackDeliveryType> k_DeliveryTypeToGradleString = new Dictionary<DeliveryType, AndroidAssetPackDeliveryType>()
         {
             { DeliveryType.InstallTime, AndroidAssetPackDeliveryType.InstallTime },
@@ -102,6 +103,7 @@ namespace AddressablesPlayAssetDelivery
         {
             return k_DeliveryTypeToGradleString[deliveryType].Name;
         }
+#endif
 #endif
     }
 }

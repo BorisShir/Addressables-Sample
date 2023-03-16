@@ -275,11 +275,13 @@ namespace AddressablesPlayAssetDelivery.Editor
                     $"Only the 'build.gradle' file will be included in the Android App Bundle.");
             }
 
+#if UNITY_ANDROID
             // Create or edit the 'build.gradle' file in the .androidpack directory
             string deliveryTypeString = CustomAssetPackUtility.DeliveryTypeToGradleString(deliveryType);
             string buildFilePath = Path.Combine(androidPackDir, "build.gradle");
             string content = $"apply plugin: 'com.android.asset-pack'\n\nassetPack {{\n\tpackName = \"{assetPackName}\"\n\tdynamicDelivery {{\n\t\tdeliveryType = \"{deliveryTypeString}\"\n\t}}\n}}";
             File.WriteAllText(buildFilePath, content);
+#endif
         }
 
         void SerializeBuildProcessorData(List<BuildProcessorDataEntry> entries)
