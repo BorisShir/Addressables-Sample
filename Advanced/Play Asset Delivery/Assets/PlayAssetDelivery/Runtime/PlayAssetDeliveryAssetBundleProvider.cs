@@ -46,6 +46,13 @@ namespace AddressablesPlayAssetDelivery
                     // Asset pack is already downloaded
                     base.Provide(providerInterface);
                 }
+                // need to invent something better
+                else if (assetPackName == "InstallTimeContent")
+                {
+                    string assetPackPath = Application.streamingAssetsPath;
+                    PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.Add("InstallTimeContent", assetPackPath);
+                    base.Provide(providerInterface);
+                }
                 else
                 {
                     Debug.Log($"Try to download remote");
@@ -79,6 +86,7 @@ namespace AddressablesPlayAssetDelivery
 
         void CheckDownloadStatus(AndroidAssetPackInfo info)
         {
+            Debug.Log($"CheckDownloadStatus for '{info.name}'");
             string message = "";
             if (info.status == AndroidAssetPackStatus.Failed)
                 message = $"Failed to retrieve the state of asset pack '{info.name}'.";
@@ -106,6 +114,7 @@ namespace AddressablesPlayAssetDelivery
             if (!string.IsNullOrEmpty(message))
             {
                 Debug.LogError(message);
+                // probably need less general exception
                 m_ProviderInterface.Complete(this, false, new Exception("exception"));
             }
         }
@@ -115,6 +124,7 @@ namespace AddressablesPlayAssetDelivery
             if (!result.allowed)
             {
                 Debug.LogError("Request to use mobile data was denied.");
+                // probably need less general exception
                 m_ProviderInterface.Complete(this, false, new Exception("exception"));
             }
         }

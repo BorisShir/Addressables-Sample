@@ -41,7 +41,8 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         static void MoveTextureCompressionData(BuildPlayerContext buildPlayerContext, string postfix)
         {
-            var customAssetPackDataPath = Path.Combine($"{CustomAssetPackUtility.kAssetPacksDataSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
+            // need to check that data for specific texture compression exist (player settings might change)
+            var customAssetPackDataPath = Path.Combine($"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
             Debug.Log($"Adding {customAssetPackDataPath}");
             buildPlayerContext.AddAdditionalPathToStreamingAssets(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, customAssetPackDataPath), customAssetPackDataPath);
 

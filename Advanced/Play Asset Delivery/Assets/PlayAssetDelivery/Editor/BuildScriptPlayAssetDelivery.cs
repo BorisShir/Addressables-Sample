@@ -121,6 +121,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     AssetDatabase.Refresh();
                     // find out what TResult might be, how we can detect that some step failed?
+                    // don't forget to restore EditorUserBuildSettings.androidBuildSubtarget on early exit
                     result = base.BuildDataImplementation<TResult>(builderInput);
                 }
             }
@@ -229,10 +230,13 @@ namespace AddressablesPlayAssetDelivery.Editor
             {
                 SerializeBuildProcessorData(bundleIdToEditorDataEntryDefault.Values.ToList(), true);
                 SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), true);
+                // find out better place for this file, also re-check whole logic, why there is error message if file is deleted
+                File.Copy($"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix()}/AddressablesLink/link.xml", "Assets");
             }
 
         }
 
+        // do we really need to pass textureCompressions array here?
         void CreateBuildOutputFolders(TextureCompressionFormat[] textureCompressions)
         {
             // Create the 'Assets/PlayAssetDelivery/Build' directory
@@ -249,15 +253,11 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}"))
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, Addressables.StreamingAssetsSubFolder);
-            if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{CustomAssetPackUtility.kAssetPacksDataSubFolder}"))
-                AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, CustomAssetPackUtility.kAssetPacksDataSubFolder);
             foreach (var textureCompression in textureCompressions)
             {
                 var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
                 if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}{postfix}"))
                     AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}");
-                if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{CustomAssetPackUtility.kAssetPacksDataSubFolder}{postfix}"))
-                    AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, $"{CustomAssetPackUtility.kAssetPacksDataSubFolder}{postfix}");
             }
         }
 
@@ -355,16 +355,10 @@ namespace AddressablesPlayAssetDelivery.Editor
                     continue;
 
                 var bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId);
+                // need to make sure that replace is working correctly, not depending on directory delimiter
                 bundleBuildPath = bundleBuildPath.Replace(Addressables.BuildPath, $"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix()}").Replace("\\", "/");
                 var bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
                 Debug.Log($"Create config files {entry.BundleFileId} {bundleBuildPath} {bundleName}");
-
-                /*var bundleFileName = Path.GetFileName(bundleBuildPath);
-                var postfix = TextureCompressionProcessor.TcfPostfix();
-                var bundleFileFolder = $"{Path.GetDirectoryName(bundleBuildPath)}{postfix}";
-                Directory.CreateDirectory(bundleFileFolder);
-                var finalBundleBuildPath = Path.Combine(bundleFileFolder, bundleFileName);
-                File.Move(bundleBuildPath, finalBundleBuildPath);*/
 
                 if (!assetPackToDataEntry.ContainsKey(assetPackName))
                 {
@@ -435,7 +429,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             var customPackData = new CustomAssetPackData(entries);
             string contents = JsonUtility.ToJson(customPackData);
-            var folderWithPostfix = CustomAssetPackUtility.kAssetPacksDataSubFolder;
+            var folderWithPostfix = Addressables.StreamingAssetsSubFolder;
             if (!isDefault)
             {
                 folderWithPostfix += TextureCompressionProcessor.TcfPostfix();

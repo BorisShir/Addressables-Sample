@@ -39,7 +39,6 @@ namespace AddressablesPlayAssetDelivery
     {
         public const string kBuildFolderName = "Build";
         public const string kPackContentFolderName = "CustomAssetPackContent";
-        public const string kAssetPacksDataSubFolder = "assetpacks";
 
         public const string kBuildProcessorDataFilename = "BuildProcessorData.json";
         public const string kCustomAssetPackDataFilename = "CustomAssetPacksData.json";
@@ -66,12 +65,12 @@ namespace AddressablesPlayAssetDelivery
 
         public static string CustomAssetPacksDataEditorPath
         {
-            get { return Path.Combine(BuildRootDirectory, kAssetPacksDataSubFolder, kCustomAssetPackDataFilename); }
+            get { return Path.Combine(BuildRootDirectory, Addressables.StreamingAssetsSubFolder, kCustomAssetPackDataFilename); }
         }
 
         public static string CustomAssetPacksDataRuntimePath
         {
-            get { return Path.Combine(Application.streamingAssetsPath, kAssetPacksDataSubFolder, kCustomAssetPackDataFilename); }
+            get { return Path.Combine(Application.streamingAssetsPath, Addressables.StreamingAssetsSubFolder, kCustomAssetPackDataFilename); }
         }
 
         public static string CustomAssetPacksAssetsPath => $"src/main/assets/{Addressables.StreamingAssetsSubFolder}/Android";
