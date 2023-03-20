@@ -85,14 +85,20 @@ namespace AddressablesPlayAssetDelivery.Editor
                 AssetDatabase.StartAssetEditing();
 
                 MoveTextureCompressionData(buildPlayerContext, "");
-                foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
+                if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
                 {
-                    var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
-                    MoveTextureCompressionData(buildPlayerContext, postfix);
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfix}", $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+                    foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
+                    {
+                        var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
+                        MoveTextureCompressionData(buildPlayerContext, postfix);
+                        buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfix}", $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+                    }
+                    buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix(PlayerSettings.Android.textureCompressionFormats[0])}", Addressables.StreamingAssetsSubFolder);
                 }
-
-                buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix(PlayerSettings.Android.textureCompressionFormats[0])}", Addressables.StreamingAssetsSubFolder);
+                else
+                {
+                    buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath, Addressables.StreamingAssetsSubFolder);
+                }
             }
             catch (Exception e)
             {

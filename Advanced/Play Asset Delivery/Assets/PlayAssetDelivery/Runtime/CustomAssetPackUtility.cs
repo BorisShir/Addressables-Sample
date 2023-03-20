@@ -76,6 +76,7 @@ namespace AddressablesPlayAssetDelivery
         public static string CustomAssetPacksAssetsPath => $"src/main/assets/{Addressables.StreamingAssetsSubFolder}/Android";
 
 #if UNITY_EDITOR
+        // check if we need this
         public static void DeleteDirectory(string directoryPath, bool onlyIfEmpty)
         {
             bool isEmpty = !Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories).Any()
