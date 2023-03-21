@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.Callbacks;
+using UnityEditor.Android;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
@@ -17,7 +18,7 @@ namespace AddressablesPlayAssetDelivery.Editor
     /// The 'CustomAssetPacksData.json' file is also added to the built player's StreamingAssets file location.
     ///
     /// This script executes before the <see cref="AddressablesPlayerBuildProcessor"/> which moves all Addressables data to StreamingAssets.
-    public class PlayAssetDeliveryBuildProcessor : BuildPlayerProcessor
+    public class PlayAssetDeliveryBuildProcessor : BuildPlayerProcessor, IPostGenerateGradleAndroidProject
     {
         /// <summary>
         /// Returns the player build processor callback order.
@@ -43,11 +44,9 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             // need to check that data for specific texture compression exist (player settings might change)
             var customAssetPackDataPath = Path.Combine($"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
-            Debug.Log($"Adding {customAssetPackDataPath}");
             buildPlayerContext.AddAdditionalPathToStreamingAssets(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, customAssetPackDataPath), customAssetPackDataPath);
 
             var buildProcessorDataPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kBuildProcessorDataFilename);
-            Debug.Log($"Looking for {buildProcessorDataPath}");
             if (File.Exists(buildProcessorDataPath))
             {
                 string contents = File.ReadAllText(buildProcessorDataPath);
@@ -56,7 +55,6 @@ namespace AddressablesPlayAssetDelivery.Editor
                 foreach (BuildProcessorDataEntry entry in data.Entries)
                 {
                     string assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
-                    Debug.Log($"Moving from {entry.BundleBuildPath} to {assetsFolderPath}");
                     if (File.Exists(entry.BundleBuildPath))
                     {
                         if (string.IsNullOrEmpty(postfix))
@@ -144,6 +142,45 @@ namespace AddressablesPlayAssetDelivery.Editor
             {
                 AssetDatabase.StopAssetEditing();
             }
+        }
+
+        const string kUnityAssetPackTextureCompressions = "UnityTextureCompressionsAssetPack";
+        const string kUnityAssetPackStreamingAssets = "UnityStreamingAssetsPack";
+
+        void MoveAddressablesData(string fromPath, string toPath, string postfix)
+        {
+            // do we need to delete prev variant?
+            if (Directory.Exists($"{toPath}{postfix}"))
+            {
+                Directory.Delete($"{toPath}{postfix}", true);
+            }
+            Directory.Move($"{fromPath}{postfix}", $"{toPath}{postfix}");
+        }
+
+        public void OnPostGenerateGradleAndroidProject(string path)
+        {
+            // We get path to unityLibrary, move above
+            var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
+            var addressablesStreamingResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
+            var addressablesResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackTextureCompressions, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
+            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
+            {
+                MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, "");
+                foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
+                {
+                    MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, TextureCompressionProcessor.TcfPostfix(textureCompression));
+                }
+                var remain = Directory.GetFiles(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), "*", SearchOption.AllDirectories);
+                if (remain.Length == 1 && remain[0].EndsWith("build.gradle"))
+                {
+                    Directory.Delete(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), true);
+                    var settingsGradle = File.ReadAllText(Path.Combine(gradleProjectPath, "settings.gradle"));
+                    File.WriteAllText(Path.Combine(gradleProjectPath, "settings.gradle"), settingsGradle.Replace("include ':UnityStreamingAssetsPack'", ""));
+                    var launcherGradle = File.ReadAllText(Path.Combine(gradleProjectPath, "launcher/build.gradle"));
+                    File.WriteAllText(Path.Combine(gradleProjectPath, "launcher/build.gradle"), launcherGradle.Replace(", \":UnityStreamingAssetsPack\"", ""));
+                }
+            }
+            // Probably recheck asset pack sizes here
         }
     }
 }

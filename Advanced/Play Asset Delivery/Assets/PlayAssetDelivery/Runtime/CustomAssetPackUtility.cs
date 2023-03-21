@@ -73,7 +73,7 @@ namespace AddressablesPlayAssetDelivery
             get { return Path.Combine(Application.streamingAssetsPath, Addressables.StreamingAssetsSubFolder, kCustomAssetPackDataFilename); }
         }
 
-        public static string CustomAssetPacksAssetsPath => $"src/main/assets/{Addressables.StreamingAssetsSubFolder}/Android";
+        public static string CustomAssetPacksAssetsPath => $"src/main/assets/{Addressables.StreamingAssetsSubFolder}";
 
 #if UNITY_EDITOR
         // check if we need this

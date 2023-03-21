@@ -28,10 +28,8 @@ namespace AddressablesPlayAssetDelivery
         void LoadFromAssetPack(ProvideHandle providerInterface)
         {
             string bundleName = Path.GetFileNameWithoutExtension(providerInterface.Location.InternalId.Replace("\\", "/"));
-            Debug.Log($"LoadFromAssetPack '{bundleName}'");
             if (!PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
             {
-                Debug.Log($"Bundle not found");
                 // Bundle is either assigned to the generated asset packs, or not assigned to any asset pack
                 base.Provide(providerInterface);
             }
@@ -39,23 +37,20 @@ namespace AddressablesPlayAssetDelivery
             {
                 // Bundle is assigned to a custom fast-follow or on-demand asset pack
                 string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
-                Debug.Log($"AssetPack '{assetPackName}'");
                 if (PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.ContainsKey(assetPackName))
                 {
-                    Debug.Log($"AssetPack not found");
                     // Asset pack is already downloaded
                     base.Provide(providerInterface);
                 }
-                // need to invent something better
-                else if (assetPackName == "InstallTimeContent")
-                {
-                    string assetPackPath = Application.streamingAssetsPath;
-                    PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.Add("InstallTimeContent", assetPackPath);
-                    base.Provide(providerInterface);
-                }
+                // need to invent something better and uncomment if install-time data would be in separate asset pack
+                //else if (assetPackName == "InstallTimeContent")
+                //{
+                //    string assetPackPath = Application.streamingAssetsPath;
+                //    PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.Add("InstallTimeContent", assetPackPath);
+                //    base.Provide(providerInterface);
+                //}
                 else
                 {
-                    Debug.Log($"Try to download remote");
                     // Download the asset pack
                     DownloadRemoteAssetPack(assetPackName);
                 }
@@ -74,7 +69,6 @@ namespace AddressablesPlayAssetDelivery
             // or depend on values that the PlayCore API returns. If the PlayCore plugin is missing, calling these methods will throw an InvalidOperationException exception.
             try
             {
-                Debug.Log($"Trying to load asset pack '{assetPackName}'");
                 AndroidAssetPacks.DownloadAssetPackAsync(new string[] { assetPackName }, CheckDownloadStatus);
             }
             catch (InvalidOperationException ioe)
@@ -86,7 +80,6 @@ namespace AddressablesPlayAssetDelivery
 
         void CheckDownloadStatus(AndroidAssetPackInfo info)
         {
-            Debug.Log($"CheckDownloadStatus for '{info.name}'");
             string message = "";
             if (info.status == AndroidAssetPackStatus.Failed)
                 message = $"Failed to retrieve the state of asset pack '{info.name}'.";
@@ -102,7 +95,6 @@ namespace AddressablesPlayAssetDelivery
 
                 if (!string.IsNullOrEmpty(assetPackPath))
                 {
-                    Debug.Log($"AssetPack downloaded '{assetPackPath}' for '{info.name}'");
                     // Asset pack was located on device. Proceed with loading the bundle.
                     PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.Add(info.name, assetPackPath);
                     base.Provide(m_ProviderInterface);
