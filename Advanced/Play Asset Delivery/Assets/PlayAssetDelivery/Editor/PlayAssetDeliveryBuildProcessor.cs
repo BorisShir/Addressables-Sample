@@ -111,6 +111,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <summary>
         /// Move custom asset pack data from their App Bundle data location to to their build location.
         /// </summary>
+        // need to check this method
         public static void MoveDataToDefaultLocation()
         {
             try
@@ -149,7 +150,6 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         void MoveAddressablesData(string fromPath, string toPath, string postfix)
         {
-            // do we need to delete prev variant?
             if (Directory.Exists($"{toPath}{postfix}"))
             {
                 Directory.Delete($"{toPath}{postfix}", true);
@@ -161,6 +161,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             // We get path to unityLibrary, move above
             var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
+
             var addressablesStreamingResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
             var addressablesResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackTextureCompressions, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
@@ -173,6 +174,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 var remain = Directory.GetFiles(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), "*", SearchOption.AllDirectories);
                 if (remain.Length == 1 && remain[0].EndsWith("build.gradle"))
                 {
+                    // delete UnityStreamingAssetsPack and its mentions in gradle files
                     Directory.Delete(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), true);
                     var settingsGradle = File.ReadAllText(Path.Combine(gradleProjectPath, "settings.gradle"));
                     File.WriteAllText(Path.Combine(gradleProjectPath, "settings.gradle"), settingsGradle.Replace("include ':UnityStreamingAssetsPack'", ""));

@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
@@ -9,16 +10,14 @@ namespace AddressablesPlayAssetDelivery
     {
         public AssetReference reference;
         public Transform parent;
+        public Text text;
 
         bool isLoading = false;
         GameObject obj = null;
+        string baseText = null;
 
         public void OnButtonClicked()
         {
-            var obj1 = GameObject.Find("Cylinder");
-            var texture1 = obj1.GetComponent<Renderer>().material.mainTexture as Texture2D;
-            UnityEngine.Debug.Log($"Cylinder texture compression {texture1.format}");
-
             if (isLoading)
                 Debug.LogError("Loading operation currently in progress.");
             else if (!isLoading)
@@ -36,8 +35,14 @@ namespace AddressablesPlayAssetDelivery
                     // Unload the object
                     Addressables.ReleaseInstance(obj);
                     obj = null;
+                    text.text = baseText;
                 }
             }
+        }
+
+        public void OnEnable()
+        {
+            baseText = text.text;
         }
 
         IEnumerator Instantiate()
@@ -46,6 +51,8 @@ namespace AddressablesPlayAssetDelivery
             AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync(reference, parent);
             yield return handle;
             obj = handle.Result;
+            var texture = obj.GetComponent<Renderer>().material.mainTexture as Texture2D;
+            text.text = $"{baseText} {texture.format}";
             isLoading = false;
         }
     }
