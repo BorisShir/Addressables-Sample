@@ -237,14 +237,17 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             var useTextureCompressionTargeting = TextureCompressionProcessor.EnabledTextureCompressionTargeting;
             var postfix = useTextureCompressionTargeting ? TextureCompressionProcessor.TcfPostfix() : "";
-            var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
             if (useTextureCompressionTargeting)
             {
-                if (Directory.Exists(tcfBuildPath))
+                if (!TextureCompressionProcessor.IsLast)
                 {
-                    Directory.Delete(tcfBuildPath, true);
+                    var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
+                    if (Directory.Exists(tcfBuildPath))
+                    {
+                        Directory.Delete(tcfBuildPath, true);
+                    }
+                    Directory.Move(Addressables.BuildPath, tcfBuildPath);
                 }
-                Directory.Move(Addressables.BuildPath, tcfBuildPath);
             }
             else
             {
@@ -262,7 +265,9 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                     CustomAssetPackEditorInfo assetPack = customAssetPacks[assetPackSchema.AssetPackIndex];
                     if (IsAssignedToCustomAssetPack(settings, group, assetPackSchema, assetPack))
+                    {
                         CreateConfigFiles(group, assetPack.AssetPackName, assetPack.DeliveryType, assetPackToDataEntry, bundleIdToEditorDataEntry, bundleIdToEditorDataEntryDefault);
+                    }
                 }
             }
             // Create the bundleIdToEditorDataEntry. It contains information for relocating custom asset pack bundles when building a player.
@@ -273,7 +278,6 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             if (useTextureCompressionTargeting)
             {
-                var sourceLinkXML = $"{tcfBuildPath}/AddressablesLink/link.xml";
                 if (TextureCompressionProcessor.IsLast)
                 {
                     // Create json files for the default variant.
@@ -281,7 +285,8 @@ namespace AddressablesPlayAssetDelivery.Editor
                     SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), "");
 
                     // moving link.xml to texture compression independent folder
-                    var targetLinkXML = $"{CustomAssetPackUtility.BuildRootDirectory}/link.xml";
+                    var sourceLinkXML = Path.Combine(Addressables.BuildPath, "AddressablesLink", "link.xml");
+                    var targetLinkXML = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, "link.xml");
                     if (File.Exists(targetLinkXML))
                     {
                         File.Delete(targetLinkXML);
@@ -291,7 +296,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 else
                 {
                     // we need only one link.xml file which would be the same for all texture compression variants
-                    File.Delete(sourceLinkXML);
+                    File.Delete(Path.Combine($"{Addressables.BuildPath}{postfix}", "AddressablesLink", "link.xml"));
                 }
             }
         }
@@ -418,11 +423,12 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (bundleIdToEditorDataEntry.ContainsKey(entry.BundleFileId))
                     continue;
 
-                var postfix = TextureCompressionProcessor.EnabledTextureCompressionTargeting ? TextureCompressionProcessor.TcfPostfix() : "";
+                var postfixDst = TextureCompressionProcessor.EnabledTextureCompressionTargeting ? TextureCompressionProcessor.TcfPostfix() : "";
+                var postfixSrc = TextureCompressionProcessor.IsLast ? "" : postfixDst;
                 var bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
                 var bundleFileName = Path.GetFileName(bundleBuildPath);
                 var bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
-                bundleBuildPath = Path.Combine($"{Addressables.BuildPath}{postfix}", Path.GetRelativePath(Addressables.BuildPath, bundleBuildPath));
+                bundleBuildPath = Path.Combine($"{Addressables.BuildPath}{postfixSrc}", Path.GetRelativePath(Addressables.BuildPath, bundleBuildPath));
 
                 if (!assetPackToDataEntry.ContainsKey(assetPackName))
                 {
@@ -439,7 +445,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 // Store the bundle's build path and its corresponding .androidpack folder location
                 var bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
-                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android{postfix}", bundleFileName);
+                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android{postfixDst}", bundleFileName);
                 bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
                 if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && TextureCompressionProcessor.IsLast)
                 {

@@ -87,11 +87,12 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
                     {
-                        var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
-                        MoveTextureCompressionData(buildPlayerContext, postfix);
-                        buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfix}", $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+                        var postfixDst = TextureCompressionProcessor.TcfPostfix(textureCompression);
+                        var postfixSrc = textureCompression == PlayerSettings.Android.textureCompressionFormats[0] ? "" : postfixDst;
+                        MoveTextureCompressionData(buildPlayerContext, postfixDst);
+                        buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
                     }
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix(PlayerSettings.Android.textureCompressionFormats[0])}", Addressables.StreamingAssetsSubFolder);
+                    buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath /*$"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix(PlayerSettings.Android.textureCompressionFormats[0])}"*/, Addressables.StreamingAssetsSubFolder);
                 }
                 else
                 {
