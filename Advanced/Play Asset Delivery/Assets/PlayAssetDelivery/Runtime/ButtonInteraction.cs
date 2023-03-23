@@ -18,25 +18,27 @@ namespace AddressablesPlayAssetDelivery
 
         public void OnButtonClicked()
         {
-            if (isLoading)
-                Debug.LogError("Loading operation currently in progress.");
-            else if (!isLoading)
+            if (text.text == "Exit")
             {
-                if (obj == null)
-                {
-                    // Load the object
-                    StartCoroutine(Instantiate());
-                }
-                else
-                {
-                    var texture = obj.GetComponent<Renderer>().material.mainTexture as Texture2D;
-                    UnityEngine.Debug.Log($"Object texture compression {texture.format}");
-
-                    // Unload the object
-                    Addressables.ReleaseInstance(obj);
-                    obj = null;
-                    text.text = baseText;
-                }
+                Application.Quit();
+                return;
+            }
+            if (isLoading)
+            {
+                Debug.LogError("Loading operation currently in progress.");
+                return;
+            }
+            if (obj == null)
+            {
+                // Load the object
+                StartCoroutine(Instantiate());
+            }
+            else
+            {
+                // Unload the object
+                Addressables.ReleaseInstance(obj);
+                obj = null;
+                text.text = baseText;
             }
         }
 
