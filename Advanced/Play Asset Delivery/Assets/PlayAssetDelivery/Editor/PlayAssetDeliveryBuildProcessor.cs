@@ -57,7 +57,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                     string assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
                     if (File.Exists(entry.BundleBuildPath))
                     {
-                        if (string.IsNullOrEmpty(postfix))
+                        if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && string.IsNullOrEmpty(postfix))
                         {
                             File.Copy(entry.BundleBuildPath, assetsFolderPath);
                         }
@@ -83,6 +83,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 AssetDatabase.StartAssetEditing();
 
                 MoveTextureCompressionData(buildPlayerContext, "");
+
                 if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
                 {
                     foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
@@ -92,12 +93,8 @@ namespace AddressablesPlayAssetDelivery.Editor
                         MoveTextureCompressionData(buildPlayerContext, postfixDst);
                         buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
                     }
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath /*$"{Addressables.BuildPath}{TextureCompressionProcessor.TcfPostfix(PlayerSettings.Android.textureCompressionFormats[0])}"*/, Addressables.StreamingAssetsSubFolder);
                 }
-                else
-                {
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath, Addressables.StreamingAssetsSubFolder);
-                }
+                buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath, Addressables.StreamingAssetsSubFolder);
             }
             catch (Exception e)
             {
@@ -160,22 +157,25 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         public void OnPostGenerateGradleAndroidProject(string path)
         {
-            // We get path to unityLibrary, move above
-            var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
-
-            var addressablesStreamingResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
-            var addressablesResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackTextureCompressions, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
             {
+                // We get path to unityLibrary, move above
+                var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
+
+                // Move all install-time addressables data to UnityAssetPackTextureCompressions as UnityAssetPackStreamingAssets might be not install-time
+                var addressablesStreamingResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
+                var addressablesResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackTextureCompressions, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
+
                 MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, "");
                 foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
                 {
                     MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, TextureCompressionProcessor.TcfPostfix(textureCompression));
                 }
+
+                // Check if UnityAssetPackStreamingAssets is empty after moving data from it and if it is, then delete its mentions from gradle files
                 var remain = Directory.GetFiles(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), "*", SearchOption.AllDirectories);
                 if (remain.Length == 1 && remain[0].EndsWith("build.gradle"))
                 {
-                    // delete UnityStreamingAssetsPack and its mentions in gradle files
                     Directory.Delete(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), true);
                     var settingsGradle = File.ReadAllText(Path.Combine(gradleProjectPath, "settings.gradle"));
                     File.WriteAllText(Path.Combine(gradleProjectPath, "settings.gradle"), settingsGradle.Replace("include ':UnityStreamingAssetsPack'", ""));

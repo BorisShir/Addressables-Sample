@@ -43,7 +43,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             EditorUserBuildSettings.androidBuildSubtarget = m_StoredTextureCompressionFormat;
         }
 
-        internal static bool IsLast => m_Current == 0;
+        internal static bool IsLast => EnabledTextureCompressionTargeting && m_Current == 0;
 
         internal static string TcfPostfix(MobileTextureSubtarget subtarget)
         {
@@ -53,7 +53,8 @@ namespace AddressablesPlayAssetDelivery.Editor
                 MobileTextureSubtarget.ETC2 => "#tcf_etc2",
                 MobileTextureSubtarget.ASTC => "#tcf_astc",
                 MobileTextureSubtarget.PVRTC => "#tcf_pvrtc",
-                MobileTextureSubtarget.DXT => "#tcf_dxt1"
+                MobileTextureSubtarget.DXT => "#tcf_dxt1",
+                _ => throw new ArgumentException($"{subtarget} is not supported by TCFT")
             };
         }
 
@@ -64,7 +65,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         internal static string TcfPostfix()
         {
-            return TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget);
+            return EnabledTextureCompressionTargeting ? TcfPostfix(EditorUserBuildSettings.androidBuildSubtarget) : "";
         }
 
         internal static MobileTextureSubtarget ConvertToMobileTextureSubtarget(TextureCompressionFormat compression)
@@ -76,7 +77,8 @@ namespace AddressablesPlayAssetDelivery.Editor
                 TextureCompressionFormat.ASTC => MobileTextureSubtarget.ASTC,
                 TextureCompressionFormat.PVRTC => MobileTextureSubtarget.PVRTC,
                 TextureCompressionFormat.DXTC => MobileTextureSubtarget.DXT,
-                TextureCompressionFormat.DXTC_RGTC => MobileTextureSubtarget.DXT
+                TextureCompressionFormat.DXTC_RGTC => MobileTextureSubtarget.DXT,
+                _ => throw new ArgumentException($"{compression} is not supported by TCFT")
             };
         }
     }
@@ -110,6 +112,38 @@ namespace AddressablesPlayAssetDelivery.Editor
             get { return "Play Asset Delivery"; }
         }
 
+        void AddResult<TResult>(ref TResult combined, TResult result) where TResult : IDataBuilderResult
+        {
+            combined.Duration += result.Duration;
+            combined.LocationCount += result.LocationCount;
+            combined.OutputPath = result.OutputPath;
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                if (string.IsNullOrEmpty(combined.Error))
+                {
+                    combined.Error = result.Error;
+                }
+                else
+                {
+                    combined.Error += $"\n{result.Error}";
+                }
+            }
+            if (result.FileRegistry != null)
+            {
+                if (combined.FileRegistry == null)
+                {
+                    combined.FileRegistry = combined.FileRegistry;
+                }
+                else
+                {
+                    foreach (var f in result.FileRegistry.GetFilePaths())
+                    {
+                        combined.FileRegistry.AddFile(f);
+                    }
+                }
+            }            
+        }
+
         protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
         {
             TResult result = AddressableAssetBuildResult.CreateResult<TResult>("", 0);
@@ -123,30 +157,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                     {
                         AssetDatabase.Refresh();
                         // consider trying to change builderInput so result is generated in the correct catalog
-                        var resultStep = base.BuildDataImplementation<TResult>(builderInput);
-
-                        // consider creating a method to create combined result
-                        result.Duration += resultStep.Duration;
-                        result.LocationCount += resultStep.LocationCount;
-                        result.OutputPath = resultStep.OutputPath;
-                        if (!string.IsNullOrEmpty(resultStep.Error))
-                        {
-                            result.Error += $"{resultStep.Error}\n";
-                        }
-                        if (resultStep.FileRegistry != null)
-                        {
-                            if (result.FileRegistry == null)
-                            {
-                                result.FileRegistry = resultStep.FileRegistry;
-                            }
-                            else
-                            {
-                                foreach (var f in resultStep.FileRegistry.GetFilePaths())
-                                {
-                                    result.FileRegistry.AddFile(f);
-                                }
-                            }
-                        }
+                        AddResult(ref result, base.BuildDataImplementation<TResult>(builderInput));
                     }
                 }
                 finally
@@ -156,6 +167,10 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
             else
             {
+                if (builderInput.Target == BuildTarget.Android)
+                {
+                    CreateBuildOutputFolders();                
+                }
                 result = base.BuildDataImplementation<TResult>(builderInput);
             }
             return result;
@@ -235,25 +250,6 @@ namespace AddressablesPlayAssetDelivery.Editor
             var bundleIdToEditorDataEntry = new Dictionary<string, BuildProcessorDataEntry>();
             var bundleIdToEditorDataEntryDefault = new Dictionary<string, BuildProcessorDataEntry>();
 
-            var useTextureCompressionTargeting = TextureCompressionProcessor.EnabledTextureCompressionTargeting;
-            var postfix = useTextureCompressionTargeting ? TextureCompressionProcessor.TcfPostfix() : "";
-            if (useTextureCompressionTargeting)
-            {
-                if (!TextureCompressionProcessor.IsLast)
-                {
-                    var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
-                    if (Directory.Exists(tcfBuildPath))
-                    {
-                        Directory.Delete(tcfBuildPath, true);
-                    }
-                    Directory.Move(Addressables.BuildPath, tcfBuildPath);
-                }
-            }
-            else
-            {
-                CreateBuildOutputFolders();
-            }
-
             foreach (AddressableAssetGroup group in settings.groups)
             {
                 if (HasRequiredSchemas(settings, group))
@@ -270,14 +266,18 @@ namespace AddressablesPlayAssetDelivery.Editor
                     }
                 }
             }
+
+            var postfix = TextureCompressionProcessor.TcfPostfix();
+
             // Create the bundleIdToEditorDataEntry. It contains information for relocating custom asset pack bundles when building a player.
             SerializeBuildProcessorData(bundleIdToEditorDataEntry.Values.ToList(), postfix);
 
             // Create the CustomAssetPacksData.json file. It contains all custom asset pack information that can be used at runtime.
             SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), postfix);
 
-            if (useTextureCompressionTargeting)
+            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
             {
+                var sourceLinkXML = Path.Combine(Addressables.BuildPath, "AddressablesLink", "link.xml");
                 if (TextureCompressionProcessor.IsLast)
                 {
                     // Create json files for the default variant.
@@ -285,7 +285,6 @@ namespace AddressablesPlayAssetDelivery.Editor
                     SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), "");
 
                     // moving link.xml to texture compression independent folder
-                    var sourceLinkXML = Path.Combine(Addressables.BuildPath, "AddressablesLink", "link.xml");
                     var targetLinkXML = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, "link.xml");
                     if (File.Exists(targetLinkXML))
                     {
@@ -296,7 +295,14 @@ namespace AddressablesPlayAssetDelivery.Editor
                 else
                 {
                     // we need only one link.xml file which would be the same for all texture compression variants
-                    File.Delete(Path.Combine($"{Addressables.BuildPath}{postfix}", "AddressablesLink", "link.xml"));
+                    File.Delete(sourceLinkXML);
+
+                    var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
+                    if (Directory.Exists(tcfBuildPath))
+                    {
+                        Directory.Delete(tcfBuildPath, true);
+                    }
+                    Directory.Move(Addressables.BuildPath, tcfBuildPath);
                 }
             }
         }
@@ -355,17 +361,14 @@ namespace AddressablesPlayAssetDelivery.Editor
                 assetPath = newPath;
             }
             var tcfSubfolder = "Android";
-            if (!TextureCompressionProcessor.EnabledTextureCompressionTargeting || TextureCompressionProcessor.IsLast)
+            if (TextureCompressionProcessor.IsLast)
             {
                 if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, tcfSubfolder)))
                     AssetDatabase.CreateFolder(assetPath, tcfSubfolder);
             }
-            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
-            {
-                tcfSubfolder += TextureCompressionProcessor.TcfPostfix();
-                if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, tcfSubfolder)))
-                    AssetDatabase.CreateFolder(assetPath, tcfSubfolder);
-            }
+            tcfSubfolder += TextureCompressionProcessor.TcfPostfix();
+            if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, tcfSubfolder)))
+                AssetDatabase.CreateFolder(assetPath, tcfSubfolder);
             return path;
         }
 
@@ -423,12 +426,11 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (bundleIdToEditorDataEntry.ContainsKey(entry.BundleFileId))
                     continue;
 
-                var postfixDst = TextureCompressionProcessor.EnabledTextureCompressionTargeting ? TextureCompressionProcessor.TcfPostfix() : "";
-                var postfixSrc = TextureCompressionProcessor.IsLast ? "" : postfixDst;
-                var bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");
+                var bundleBuildPath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId).Replace("\\", "/");               
                 var bundleFileName = Path.GetFileName(bundleBuildPath);
                 var bundleName = Path.GetFileNameWithoutExtension(bundleBuildPath);
-                bundleBuildPath = Path.Combine($"{Addressables.BuildPath}{postfixSrc}", Path.GetRelativePath(Addressables.BuildPath, bundleBuildPath));
+                var postfix = TextureCompressionProcessor.IsLast ? "" : TextureCompressionProcessor.TcfPostfix();
+                bundleBuildPath = Path.Combine($"{Addressables.BuildPath}{postfix}", Path.GetRelativePath(Addressables.BuildPath, bundleBuildPath));
 
                 if (!assetPackToDataEntry.ContainsKey(assetPackName))
                 {
@@ -445,9 +447,9 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 // Store the bundle's build path and its corresponding .androidpack folder location
                 var bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
-                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android{postfixDst}", bundleFileName);
+                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android{TextureCompressionProcessor.TcfPostfix()}", bundleFileName);
                 bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
-                if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && TextureCompressionProcessor.IsLast)
+                if (TextureCompressionProcessor.IsLast)
                 {
                     assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android", bundleFileName);
                     bundleIdToEditorDataEntryDefault.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
