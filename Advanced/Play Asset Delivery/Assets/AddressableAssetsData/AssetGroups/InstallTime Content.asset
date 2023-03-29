@@ -15,15 +15,16 @@ MonoBehaviour:
   m_GroupName: InstallTime Content
   m_Data:
     m_SerializedData: []
-  m_GUID: ec8f08996746ef84c9dcac7fe44bec04
+  m_GUID: 41a3461035665ec408a27e341e53ff5c
   m_SerializeEntries:
   - m_GUID: 0f79838beedbe5942b52ef507dfc2400
-    m_Address: Cube
+    m_Address: Assets/Prefabs/Cube.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: b5c09aef320017846b8c82aaae72d986, type: 2}
   m_SchemaSet:
     m_Schemas:
-    - {fileID: 11400000, guid: 36632d627bea46641a4eefc7607216a7, type: 2}
-    - {fileID: 11400000, guid: 60790962b89220c4d805b8764b7e9846, type: 2}
+    - {fileID: 11400000, guid: 36bf59a464d9942489b9204c5ea6b1b6, type: 2}
+    - {fileID: 11400000, guid: ac5b90ab96cb38e49bda11b0e5e68e9f, type: 2}

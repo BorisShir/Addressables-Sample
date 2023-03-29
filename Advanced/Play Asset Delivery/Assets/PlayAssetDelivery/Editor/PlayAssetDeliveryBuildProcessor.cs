@@ -63,9 +63,14 @@ namespace AddressablesPlayAssetDelivery.Editor
                         }
                         else
                         {
-                            string metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);
                             File.Move(entry.BundleBuildPath, assetsFolderPath);
-                            File.Delete(metaFilePath);
+                            string metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);
+                            if (File.Exists(metaFilePath))
+                            {
+                                // metafile might exist only if BuildPath is not default "LocalBuildPath"
+                                // and points to something inside Assets folder
+                                File.Delete(metaFilePath);
+                            }
                         }
                     }
                 }

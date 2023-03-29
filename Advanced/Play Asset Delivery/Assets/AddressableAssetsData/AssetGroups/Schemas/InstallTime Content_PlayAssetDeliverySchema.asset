@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ddf04df31ada87443bbb32712b3e2e4b, type: 3}
   m_Name: InstallTime Content_PlayAssetDeliverySchema
   m_EditorClassIdentifier: 
-  m_Group: {fileID: 11400000, guid: dbcfd3d3e16edd247a1ed269e11f8a37, type: 2}
+  m_Group: {fileID: 11400000, guid: abae80b6637459f43af04ad34c5a3f6c, type: 2}
   m_AssetPackIndex: 0
   m_IncludeInAssetPack: 1
-  m_Settings: {fileID: 11400000, guid: a2e96aef650c01a4da07478d97d3b10e, type: 2}
+  m_Settings: {fileID: 0}

@@ -89,10 +89,10 @@ namespace AddressablesPlayAssetDelivery.Editor
     ///
     /// We will create the config files necessary for creating an asset pack (see https://docs.unity3d.com/Manual/play-asset-delivery.html#custom-asset-packs).
     /// The files are:
-    /// * An {asset pack name}.androidpack folder located in 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent'
+    /// * An {asset pack name}.androidpack folder located in 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent/src/main/assets/aa/Android'
     /// * A 'build.gradle' file for each .androidpack folder. If this file is missing, Unity will assume that the asset pack uses "on-demand" delivery.
     ///
-    /// Additionally we generate some files to store build and runtime data that are located in in 'Assets/PlayAssetDelivery/Build':
+    /// Additionally we generate some files to store build and runtime data that are located in in 'Assets/PlayAssetDelivery/Build/aa':
     /// * Create a 'BuildProcessorData.json' file to store the build paths and .androidpack paths for bundles that should be assigned to custom asset packs.
     /// At build time this will be used by the <see cref="PlayAssetDeliveryBuildProcessor"/> to relocate bundles to their corresponding .androidpack paths.
     /// * Create a 'CustomAssetPacksData.json' file to store custom asset pack information to be used at runtime. See <see cref="PlayAssetDeliveryInitialization"/>.
@@ -141,7 +141,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                         combined.FileRegistry.AddFile(f);
                     }
                 }
-            }            
+            }
         }
 
         protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
@@ -169,7 +169,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             {
                 if (builderInput.Target == BuildTarget.Android)
                 {
-                    CreateBuildOutputFolders();                
+                    CreateBuildOutputFolders();
                 }
                 result = base.BuildDataImplementation<TResult>(builderInput);
             }
@@ -480,7 +480,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             string buildFilePath = Path.Combine(androidPackDir, "build.gradle");
             string content = $"apply plugin: 'com.android.asset-pack'\n\nassetPack {{\n\tpackName = \"{assetPackName}\"\n\tdynamicDelivery {{\n\t\tdeliveryType = \"{deliveryTypeString}\"\n\t}}\n}}";
             File.WriteAllText(buildFilePath, content);
-#endif            
+#endif
         }
 
         void SerializeBuildProcessorData(List<BuildProcessorDataEntry> entries, string postfix)

@@ -15,15 +15,16 @@ MonoBehaviour:
   m_GroupName: FastFollow Content
   m_Data:
     m_SerializedData: []
-  m_GUID: 8c617aa2af96e4346bc025eb32c9f79b
+  m_GUID: 9a8eaed4bf26c24428928c6768ba720d
   m_SerializeEntries:
   - m_GUID: 3923fde39e7c6c14f81a20e998f099f7
-    m_Address: Sphere
+    m_Address: Assets/Prefabs/Sphere.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: b5c09aef320017846b8c82aaae72d986, type: 2}
   m_SchemaSet:
     m_Schemas:
-    - {fileID: 11400000, guid: 1c982bf07e4def143862dd56055d6e4c, type: 2}
-    - {fileID: 11400000, guid: 76cd8fac97e13544c815670ed263abf3, type: 2}
+    - {fileID: 11400000, guid: 162ed3b8981dc8543b503dc3a3e29cae, type: 2}
+    - {fileID: 11400000, guid: 8d46555eebeee434a9c68591daf473e2, type: 2}

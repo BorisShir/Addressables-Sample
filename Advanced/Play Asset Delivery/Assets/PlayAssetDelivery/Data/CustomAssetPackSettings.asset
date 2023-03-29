@@ -19,3 +19,5 @@ MonoBehaviour:
     DeliveryType: 2
   - AssetPackName: CustomOnDemand
     DeliveryType: 3
+  - AssetPackName: SecondOnDemand
+    DeliveryType: 3

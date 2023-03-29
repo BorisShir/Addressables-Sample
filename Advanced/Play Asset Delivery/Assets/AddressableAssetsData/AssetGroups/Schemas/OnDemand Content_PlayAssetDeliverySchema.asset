@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ddf04df31ada87443bbb32712b3e2e4b, type: 3}
   m_Name: OnDemand Content_PlayAssetDeliverySchema
   m_EditorClassIdentifier: 
-  m_Group: {fileID: 11400000, guid: 3e845d36e7d162e41b0ef6a48a55909c, type: 2}
+  m_Group: {fileID: 11400000, guid: f852198b59c79ad4d89871d8444f1d59, type: 2}
   m_AssetPackIndex: 2
   m_IncludeInAssetPack: 1
   m_Settings: {fileID: 11400000, guid: f0736598cb860a84096aede434d8ca61, type: 2}
