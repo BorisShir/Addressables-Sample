@@ -10,6 +10,27 @@ namespace AddressablesPlayAssetDelivery.Editor
     public class PlayAssetDeliverySchema : AddressableAssetGroupSchema
     {
         [SerializeField]
+        DeliveryType m_AssetPackDeliveryType = DeliveryType.FastFollow;
+        /// <summary>
+        /// Represents the asset pack delivery type.
+        /// </summary>
+        public DeliveryType AssetPackDeliveryType
+        {
+            get
+            {
+                return m_AssetPackDeliveryType;
+            }
+            set
+            {
+                if (m_AssetPackDeliveryType != value)
+                {
+                    m_AssetPackDeliveryType = value;
+                    SetDirty(true);
+                }
+            }
+        }
+
+        [SerializeField]
         int m_AssetPackIndex = 0;
         /// <summary>
         /// Represents the asset pack that will contain this group's bundled content. Note that 'InstallTimeContent' is representative of the generated asset packs.
@@ -31,7 +52,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         }
 
         [SerializeField]
-        bool m_IncludeInAssetPack = true;
+        bool m_IncludeInAssetPack = false;
         /// <summary>
         /// Controls whether to include content in the specified asset pack.
         /// We use <see cref="BuildScriptPlayAssetDelivery"/> to assign content to custom asset packs.
@@ -72,14 +93,18 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
+        GUIContent m_DeliveryTypeGUI =
+            new GUIContent("Delivery Type", "Asset pack delivery type");
+
         GUIContent m_AssetPackGUI =
-            new GUIContent("Asset Pack", "Asset pack that will contain this group's bundled content.");
+            new GUIContent("Custom Asset Pack", "Custom asset pack that will contain this group's bundled content.");
 
         GUIContent m_IncludeInAssetPackGUI =
-            new GUIContent("Include In Asset Pack", "Controls whether to include this group's bundled content in the specified custom asset pack when using the 'Play Asset Delivery' build script.");
+            new GUIContent("Include In Custom Asset Pack", "Controls whether to include this group's bundled content in the specified custom asset pack when using the 'Play Asset Delivery' build script.");
 
         public void ResetAssetPackIndex()
         {
+            AssetPackDeliveryType = DeliveryType.InstallTime;
             AssetPackIndex = 0;
             m_Settings = null;
         }
@@ -87,34 +112,28 @@ namespace AddressablesPlayAssetDelivery.Editor
         void ShowAssetPacks(SerializedObject so, List<AddressableAssetGroupSchema> otherSchemas = null)
         {
             List<CustomAssetPackEditorInfo> customAssetPacks = Settings.CustomAssetPacks;
-            int current = AssetPackIndex;
 
-            string[] displayOptions = new string[customAssetPacks.Count];
-            for (int i = 0; i < customAssetPacks.Count; i++)
-            {
-                displayOptions[i] = $"{customAssetPacks[i].AssetPackName} ({customAssetPacks[i].DeliveryType})";
-            }
-
-            SerializedProperty prop = so.FindProperty("m_AssetPackIndex");
+            var deliveryType = AssetPackDeliveryType;
+            SerializedProperty prop = so.FindProperty("m_AssetPackDeliveryType");
             if (otherSchemas != null)
-                ShowMixedValue(prop, otherSchemas, typeof(int), "m_AssetPackIndex");
+                ShowMixedValue(prop, otherSchemas, typeof(int), "m_AssetPackDeliveryType");
 
+            EditorGUI.BeginDisabledGroup(IncludeInAssetPack);
             EditorGUI.BeginChangeCheck();
-            var newIndex = EditorGUILayout.Popup(m_AssetPackGUI, current, displayOptions);
+            var newValue = (DeliveryType)EditorGUILayout.EnumPopup(m_DeliveryTypeGUI, deliveryType);
             if (EditorGUI.EndChangeCheck())
             {
-                AssetPackIndex = newIndex;
+                AssetPackDeliveryType = newValue;
                 if (otherSchemas != null)
                 {
                     foreach (AddressableAssetGroupSchema s in otherSchemas)
                     {
                         PlayAssetDeliverySchema padSchema = s as PlayAssetDeliverySchema;
-                        padSchema.AssetPackIndex = newIndex;
+                        padSchema.AssetPackDeliveryType = newValue;
                     }
                 }
             }
-            if (otherSchemas != null)
-                EditorGUI.showMixedValue = false;
+            EditorGUI.EndDisabledGroup();
 
             prop = so.FindProperty("m_IncludeInAssetPack");
             if (otherSchemas != null)
@@ -133,19 +152,51 @@ namespace AddressablesPlayAssetDelivery.Editor
                     }
                 }
             }
-            if (AssetPackIndex == 0 && !IncludeInAssetPack)
-                EditorGUILayout.HelpBox("Will still be included if \"Content Packing & Loading\" > \"Build Path\" uses the Addressables.BuildPath or Application.streamingAssetsPath.", MessageType.Info);
 
-            if (otherSchemas != null)
-                EditorGUI.showMixedValue = false;
-
-            using (new GUILayout.HorizontalScope())
+            if (IncludeInAssetPack)
             {
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Manage Asset Packs", "Minibutton"))
+                var current = AssetPackIndex;
+                string[] displayOptions = new string[customAssetPacks.Count];
+                for (int i = 0; i < customAssetPacks.Count; i++)
                 {
-                    EditorGUIUtility.PingObject(Settings);
-                    Selection.activeObject = Settings;
+                    displayOptions[i] = $"{customAssetPacks[i].AssetPackName} ({customAssetPacks[i].DeliveryType})";
+                }
+
+                prop = so.FindProperty("m_AssetPackIndex");
+                if (otherSchemas != null)
+                    ShowMixedValue(prop, otherSchemas, typeof(int), "m_AssetPackIndex");
+
+                EditorGUI.BeginChangeCheck();
+                var newIndex = EditorGUILayout.Popup(m_AssetPackGUI, current, displayOptions);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    AssetPackIndex = newIndex;
+                    if (otherSchemas != null)
+                    {
+                        foreach (AddressableAssetGroupSchema s in otherSchemas)
+                        {
+                            PlayAssetDeliverySchema padSchema = s as PlayAssetDeliverySchema;
+                            padSchema.AssetPackIndex = newIndex;
+                        }
+                    }
+                }
+                if (otherSchemas != null)
+                    EditorGUI.showMixedValue = false;
+
+                if (AssetPackIndex == 0 && !IncludeInAssetPack)
+                    EditorGUILayout.HelpBox("Will still be included if \"Content Packing & Loading\" > \"Build Path\" uses the Addressables.BuildPath or Application.streamingAssetsPath.", MessageType.Info);
+
+                if (otherSchemas != null)
+                    EditorGUI.showMixedValue = false;
+
+                using (new GUILayout.HorizontalScope())
+                {
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Manage Custom Asset Packs", "Minibutton"))
+                    {
+                        EditorGUIUtility.PingObject(Settings);
+                        Selection.activeObject = Settings;
+                    }
                 }
             }
         }

@@ -245,7 +245,6 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         void CreateCustomAssetPacks(AddressableAssetSettings settings, CustomAssetPackSettings customAssetPackSettings, bool resetAssetPackSchemaData)
         {
-            List<CustomAssetPackEditorInfo> customAssetPacks = customAssetPackSettings.CustomAssetPacks;
             var assetPackToDataEntry = new Dictionary<string, CustomAssetPackDataEntry>();
             var bundleIdToEditorDataEntry = new Dictionary<string, BuildProcessorDataEntry>();
             var bundleIdToEditorDataEntryDefault = new Dictionary<string, BuildProcessorDataEntry>();
@@ -255,14 +254,24 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (HasRequiredSchemas(settings, group))
                 {
                     var assetPackSchema = group.GetSchema<PlayAssetDeliverySchema>();
-                    // Reset schema data to match Custom Asset Pack Settings. This can occur when the CustomAssetPackSettings was deleted but the schema properties still use the old settings data.
-                    if (resetAssetPackSchemaData || assetPackSchema.AssetPackIndex >= customAssetPacks.Count)
-                        assetPackSchema.ResetAssetPackIndex();
-
-                    CustomAssetPackEditorInfo assetPack = customAssetPacks[assetPackSchema.AssetPackIndex];
-                    if (IsAssignedToCustomAssetPack(settings, group, assetPackSchema, assetPack))
+                    var deliveryType = assetPackSchema.AssetPackDeliveryType;
+                    // Must be alphanumeric name which starts with letter, also need to check that name is unique (including custom asset packs)
+                    var assetPackName = group.Name;
+                    if (assetPackSchema.IncludeInAssetPack)
                     {
-                        CreateConfigFiles(group, assetPack.AssetPackName, assetPack.DeliveryType, assetPackToDataEntry, bundleIdToEditorDataEntry, bundleIdToEditorDataEntryDefault);
+                        List<CustomAssetPackEditorInfo> customAssetPacks = customAssetPackSettings.CustomAssetPacks;
+                        // Reset schema data to match Custom Asset Pack Settings. This can occur when the CustomAssetPackSettings was deleted but the schema properties still use the old settings data.
+                        if (resetAssetPackSchemaData || assetPackSchema.AssetPackIndex >= customAssetPacks.Count)
+                            assetPackSchema.ResetAssetPackIndex();
+
+                        var assetPack = customAssetPacks[assetPackSchema.AssetPackIndex];
+                        deliveryType = assetPack.DeliveryType;
+                        assetPackName = assetPack.AssetPackName;
+                    }
+
+                    if (IsAssignedToCustomAssetPack(settings, group, assetPackSchema, deliveryType))
+                    {
+                        CreateConfigFiles(group, assetPackName, deliveryType, assetPackToDataEntry, bundleIdToEditorDataEntry, bundleIdToEditorDataEntryDefault);
                     }
                 }
             }
@@ -399,29 +408,31 @@ namespace AddressablesPlayAssetDelivery.Editor
             return true;
         }
 
-        bool IsAssignedToCustomAssetPack(AddressableAssetSettings settings, AddressableAssetGroup group, PlayAssetDeliverySchema schema, CustomAssetPackEditorInfo assetPack)
+        bool IsAssignedToCustomAssetPack(AddressableAssetSettings settings, AddressableAssetGroup group, PlayAssetDeliverySchema schema, DeliveryType deliveryType)
         {
-            if (!schema.IncludeInAssetPack)
+            if (!schema.IncludeInAssetPack && schema.AssetPackDeliveryType == DeliveryType.None)
             {
                 var bundledSchema = group.GetSchema<BundledAssetGroupSchema>();
                 string buildPath = bundledSchema.BuildPath.GetValue(settings);
                 if (BuildPathIncludedInStreamingAssets(buildPath))
                 {
-                    Addressables.LogWarning($"Group '{group.name}' has 'Include In Asset Pack' disabled, but its build path '{buildPath}' will be included in StreamingAssets at build time. " +
-                        $"The group will be assigned to the streaming assets pack.");
+                    // need to check what happens with TC targeting in this case
+                    Addressables.LogWarning($"Group '{group.name}' has Delivery Type set to 'None' and it is not included to any custom asset packs, but its build path '{buildPath}' will be included in StreamingAssets at build time. The group will be assigned to the streaming assets pack.");
                 }
                 return false;
             }
             // Comment if we want to create separate asset pack(s) for install-time addressables
-            if (assetPack.DeliveryType == DeliveryType.InstallTime)
+            if (deliveryType == DeliveryType.InstallTime)
+            {
                 return false;
+            }
 
             return true;
         }
 
         void CreateConfigFiles(AddressableAssetGroup group, string assetPackName, DeliveryType deliveryType, Dictionary<string, CustomAssetPackDataEntry> assetPackToDataEntry, Dictionary<string, BuildProcessorDataEntry> bundleIdToEditorDataEntry, Dictionary<string, BuildProcessorDataEntry> bundleIdToEditorDataEntryDefault)
         {
-            foreach (AddressableAssetEntry entry in group.entries)
+            foreach (var entry in group.entries)
             {
                 if (bundleIdToEditorDataEntry.ContainsKey(entry.BundleFileId))
                     continue;
