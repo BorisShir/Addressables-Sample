@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
@@ -112,6 +113,8 @@ namespace AddressablesPlayAssetDelivery.Editor
             get { return "Play Asset Delivery"; }
         }
 
+        Dictionary<string, string> m_AssetPacksNames = new Dictionary<string, string>();
+
         void AddResult<TResult>(ref TResult combined, TResult result) where TResult : IDataBuilderResult
         {
             combined.Duration += result.Duration;
@@ -147,6 +150,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
         {
             TResult result = AddressableAssetBuildResult.CreateResult<TResult>("", 0);
+            m_AssetPacksNames.Clear();
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && builderInput.Target == BuildTarget.Android)
             {
                 CreateBuildOutputFolders(PlayerSettings.Android.textureCompressionFormats);
@@ -254,9 +258,8 @@ namespace AddressablesPlayAssetDelivery.Editor
                 if (HasRequiredSchemas(settings, group))
                 {
                     var assetPackSchema = group.GetSchema<PlayAssetDeliverySchema>();
-                    var deliveryType = assetPackSchema.AssetPackDeliveryType;
-                    // Must be alphanumeric name which starts with letter, also need to check that name is unique (including custom asset packs)
-                    var assetPackName = group.Name;
+                    DeliveryType deliveryType = DeliveryType.None;
+                    string assetPackName = "";
                     if (assetPackSchema.IncludeInAssetPack)
                     {
                         List<CustomAssetPackEditorInfo> customAssetPacks = customAssetPackSettings.CustomAssetPacks;
@@ -267,6 +270,20 @@ namespace AddressablesPlayAssetDelivery.Editor
                         var assetPack = customAssetPacks[assetPackSchema.AssetPackIndex];
                         deliveryType = assetPack.DeliveryType;
                         assetPackName = assetPack.AssetPackName;
+                    }
+                    else
+                    {
+                        deliveryType = assetPackSchema.AssetPackDeliveryType;
+                        if (!m_AssetPacksNames.TryGetValue(group.Name, out assetPackName))
+                        {
+                            assetPackName = Regex.Replace(group.Name, "[^A-Za-z0-9_-]", "");
+                            if (assetPackName.Length == 0 || !char.IsLetter(assetPackName[0]))
+                            {
+                                assetPackName = "Group" + assetPackName;
+                            }
+                            assetPackName = customAssetPackSettings.GenerateUniqueName(assetPackName, m_AssetPacksNames.Values);
+                            m_AssetPacksNames[group.Name] = assetPackName;
+                        }
                     }
 
                     if (IsAssignedToCustomAssetPack(settings, group, assetPackSchema, deliveryType))

@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: PlayAssetDeliverySchema
   m_EditorClassIdentifier: 
   m_Group: {fileID: 0}
+  m_AssetPackDeliveryType: 2
   m_AssetPackIndex: 0
-  m_IncludeInAssetPack: 1
+  m_IncludeInAssetPack: 0
   m_Settings: {fileID: 11400000, guid: f0736598cb860a84096aede434d8ca61, type: 2}
 --- !u!114 &-1206921786351564605
 MonoBehaviour:

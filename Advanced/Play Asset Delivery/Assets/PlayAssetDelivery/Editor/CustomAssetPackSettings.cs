@@ -62,7 +62,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         public void AddUniqueAssetPack()
         {
-            string assetPackName = GenerateUniqueName(kDefaultPackName, CustomAssetPacks.Select(p => p.AssetPackName));
+            string assetPackName = GenerateUniqueName(kDefaultPackName);
             AddCustomAssetPack(assetPackName, kDefaultDeliveryType);
         }
 
@@ -72,12 +72,11 @@ namespace AddressablesPlayAssetDelivery.Editor
             {
                 if (!m_ValidAssetPackName.IsMatch(assetPackName))
                 {
-                    Debug.LogError($"Cannot name custom asset pack '{assetPackName}'. All characters must be alphanumeric or an underscore. " +
-                        $"Also the first character must be a letter.");
+                    Debug.LogError($"Cannot name custom asset pack '{assetPackName}'. All characters must be alphanumeric or an underscore. Also the first character must be a letter.");
                 }
                 else
                 {
-                    string newName = GenerateUniqueName(assetPackName, CustomAssetPacks.Select(p => p.AssetPackName));
+                    string newName = GenerateUniqueName(assetPackName);
                     CustomAssetPacks[index].AssetPackName = newName;
                     EditorUtility.SetDirty(this);
                 }
@@ -93,9 +92,13 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
-        internal string GenerateUniqueName(string baseName, IEnumerable<string> enumerable)
+        internal string GenerateUniqueName(string baseName, IEnumerable<string> groupNames = null)
         {
-            var set = new HashSet<string>(enumerable);
+            var set = new HashSet<string>(CustomAssetPacks.Select(p => p.AssetPackName));
+            if (groupNames != null)
+            {
+                set.UnionWith(groupNames);
+            }
             int counter = 1;
             var newName = baseName;
             while (set.Contains(newName))
