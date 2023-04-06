@@ -151,6 +151,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             TResult result = AddressableAssetBuildResult.CreateResult<TResult>("", 0);
             m_AssetPacksNames.Clear();
+            PlayAssetDeliveryBuildProcessor.MoveDataToDefaultLocation();
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && builderInput.Target == BuildTarget.Android)
             {
                 CreateBuildOutputFolders(PlayerSettings.Android.textureCompressionFormats);
@@ -177,6 +178,12 @@ namespace AddressablesPlayAssetDelivery.Editor
                 }
                 result = base.BuildDataImplementation<TResult>(builderInput);
             }
+
+            if (EditorUserBuildSettings.buildAppBundle && (PlayerSettings.Android.splitApplicationBinary || TextureCompressionProcessor.EnabledTextureCompressionTargeting))
+            {
+                PlayAssetDeliveryBuildProcessor.MoveDataForAppBundleBuild();
+            }
+
             return result;
         }
 
