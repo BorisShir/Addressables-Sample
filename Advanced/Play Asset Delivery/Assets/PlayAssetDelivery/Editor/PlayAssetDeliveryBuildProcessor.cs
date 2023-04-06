@@ -25,7 +25,6 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// </summary>
         public override int callbackOrder
         {
-            // making this 2 helps to execute PrepareForBuild after Addressables are built, but causes problems with building project
             get { return 0; }
         }
 
@@ -35,20 +34,19 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <param name="buildPlayerContext">Contains data related to the player.</param>
         public override void PrepareForBuild(BuildPlayerContext buildPlayerContext)
         {
-            if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android && EditorUserBuildSettings.buildAppBundle && TextureCompressionProcessor.EnabledTextureCompressionTargeting)
-            {
-                foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
-                {
-                    var postfixDst = TextureCompressionProcessor.TcfPostfix(textureCompression);
-                    var postfixSrc = textureCompression == PlayerSettings.Android.textureCompressionFormats[0] ? "" : postfixDst;
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
-                }
-            }
+            if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android && EditorUserBuildSettings.buildAppBundle)
+                MoveDataForAppBundleBuild(buildPlayerContext);
+            else
+                MoveDataToDefaultLocation();
         }
 
-        static void MoveTextureCompressionData(string projectPath, string postfix)
+        static void MoveTextureCompressionData(BuildPlayerContext buildPlayerContext, string postfix)
         {
-            var buildProcessorDataPath = Path.Combine(Path.GetDirectoryName(Addressables.BuildPath), "BuildProcessorData", $"BuildProcessorData{postfix}.json");
+            // need to check that data for specific texture compression exist (player settings might change)
+            var customAssetPackDataPath = Path.Combine($"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
+            buildPlayerContext.AddAdditionalPathToStreamingAssets(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, customAssetPackDataPath), customAssetPackDataPath);
+
+            var buildProcessorDataPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kBuildProcessorDataFilename);
             if (File.Exists(buildProcessorDataPath))
             {
                 string contents = File.ReadAllText(buildProcessorDataPath);
@@ -56,22 +54,104 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 foreach (BuildProcessorDataEntry entry in data.Entries)
                 {
-                    string assetsTargetPath = Path.Combine(projectPath, entry.AssetsSubfolderPath);
-                    string assetsSourcePath = Path.Combine(projectPath, entry.BundleBuildPath);
-
-                    if (File.Exists(assetsSourcePath))
+                    string assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
+                    if (File.Exists(entry.BundleBuildPath))
                     {
-                        Debug.Log($"Moving from {assetsSourcePath} to {assetsTargetPath}");
-                        File.Move(assetsSourcePath, assetsTargetPath);
+                        if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && string.IsNullOrEmpty(postfix))
+                        {
+                            File.Copy(entry.BundleBuildPath, assetsFolderPath);
+                        }
+                        else
+                        {
+                            File.Move(entry.BundleBuildPath, assetsFolderPath);
+                            string metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);
+                            if (File.Exists(metaFilePath))
+                            {
+                                // metafile might exist only if BuildPath is not default "LocalBuildPath"
+                                // and points to something inside Assets folder
+                                File.Delete(metaFilePath);
+                            }
+                        }
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Move custom asset pack data from their build location to their App Bundle data location.
+        /// </summary>
+        /// <param name="buildPlayerContext">Contains data related to the player.</param>
+        public static void MoveDataForAppBundleBuild(BuildPlayerContext buildPlayerContext)
+        {
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+
+                MoveTextureCompressionData(buildPlayerContext, "");
+
+                if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
+                {
+                    foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
+                    {
+                        var postfixDst = TextureCompressionProcessor.TcfPostfix(textureCompression);
+                        var postfixSrc = textureCompression == PlayerSettings.Android.textureCompressionFormats[0] ? "" : postfixDst;
+                        MoveTextureCompressionData(buildPlayerContext, postfixDst);
+                        buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
+                    }
+                }
+                buildPlayerContext.AddAdditionalPathToStreamingAssets(Addressables.BuildPath, Addressables.StreamingAssetsSubFolder);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Exception occured when moving data for an app bundle build: {e.Message}.");
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+        }
+
+        /// <summary>
+        /// Move custom asset pack data from their App Bundle data location to to their build location.
+        /// </summary>
+        // need to check this method
+        public static void MoveDataToDefaultLocation()
+        {
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+
+                if (File.Exists(CustomAssetPackUtility.BuildProcessorDataPath))
+                {
+                    string contents = File.ReadAllText(CustomAssetPackUtility.BuildProcessorDataPath);
+                    var data =  JsonUtility.FromJson<BuildProcessorData>(contents);
+
+                    foreach (BuildProcessorDataEntry entry in data.Entries)
+                    {
+                        string assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
+                        if (File.Exists(assetsFolderPath))
+                        {
+                            string metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(assetsFolderPath);
+                            File.Move(assetsFolderPath, entry.BundleBuildPath);
+                            File.Delete(metaFilePath);
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Exception occured when moving data for a player build: {e.Message}.");
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
             }
         }
 
         const string kUnityAssetPackTextureCompressions = "UnityTextureCompressionsAssetPack";
         const string kUnityAssetPackStreamingAssets = "UnityStreamingAssetsPack";
 
-        void MoveInstallTimeData(string fromPath, string toPath, string postfix)
+        void MoveAddressablesData(string fromPath, string toPath, string postfix)
         {
             if (Directory.Exists($"{toPath}{postfix}"))
             {
@@ -82,44 +162,25 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         public void OnPostGenerateGradleAndroidProject(string path)
         {
-            if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android || !EditorUserBuildSettings.buildAppBundle)
-            {
-                return;
-            }
-
-            // We get path to unityLibrary, move above
-            var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
-
-            // Clean all asset pack folders created from 'Assets/PlayAssetDelivery/Build'
-            foreach (var dir in Directory.EnumerateDirectories(CustomAssetPackUtility.PackContentRootDirectory, "*.androidpack"))
-            {
-                var packName = Path.GetFileName(dir)[0..^12];
-            }
-
-            MoveTextureCompressionData(gradleProjectPath, "");
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
             {
-                foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
-                {
-                    var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
-                    MoveTextureCompressionData(gradleProjectPath, postfix);
-                }
+                // We get path to unityLibrary, move above
+                var gradleProjectPath = Path.GetFullPath(Path.Combine(path, ".."));
 
                 // Move all install-time addressables data to UnityAssetPackTextureCompressions as UnityAssetPackStreamingAssets might be not install-time
                 var addressablesStreamingResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
                 var addressablesResourcesPath = Path.Combine(gradleProjectPath, kUnityAssetPackTextureCompressions, CustomAssetPackUtility.CustomAssetPacksAssetsPath);
 
-                MoveInstallTimeData(addressablesStreamingResourcesPath, addressablesResourcesPath, "");
+                MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, "");
                 foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
                 {
-                    MoveInstallTimeData(addressablesStreamingResourcesPath, addressablesResourcesPath, TextureCompressionProcessor.TcfPostfix(textureCompression));
+                    MoveAddressablesData(addressablesStreamingResourcesPath, addressablesResourcesPath, TextureCompressionProcessor.TcfPostfix(textureCompression));
                 }
 
                 // Check if UnityAssetPackStreamingAssets is empty after moving data from it and if it is, then delete its mentions from gradle files
                 var remain = Directory.GetFiles(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), "*", SearchOption.AllDirectories);
                 if (remain.Length == 1 && remain[0].EndsWith("build.gradle"))
                 {
-                    // only build.gradle file remain
                     Directory.Delete(Path.Combine(gradleProjectPath, kUnityAssetPackStreamingAssets), true);
                     var settingsGradle = File.ReadAllText(Path.Combine(gradleProjectPath, "settings.gradle"));
                     File.WriteAllText(Path.Combine(gradleProjectPath, "settings.gradle"), settingsGradle.Replace("include ':UnityStreamingAssetsPack'", ""));
@@ -127,16 +188,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                     File.WriteAllText(Path.Combine(gradleProjectPath, "launcher/build.gradle"), launcherGradle.Replace(", \":UnityStreamingAssetsPack\"", ""));
                 }
             }
-            else
-            {
-                // check where are our data UnityAssetPackStreamingAssets or UnityDataAssetPack
-                // check if this pack is install-time, if yes - OK
-                // if not - move our data to UnityLibrary (dev wants them to be install-time)
-                // check if pack is empty after moving
-            }
-            // Try to remove stub files
-
-            // recheck asset pack sizes here
+            // Probably recheck asset pack sizes here
         }
     }
 }

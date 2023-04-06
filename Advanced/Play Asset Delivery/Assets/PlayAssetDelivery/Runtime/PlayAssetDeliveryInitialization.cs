@@ -201,12 +201,12 @@ namespace AddressablesPlayAssetDelivery
         {
             if (location.ResourceType == typeof(IAssetBundleResource))
             {
-                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId);
+                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
                 if (PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
                 {
                     string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
                     string androidPackFolder = $"{CustomAssetPackUtility.PackContentRootDirectory}/{assetPackName}.androidpack";
-                    string bundlePath = Path.Combine(androidPackFolder, Path.GetFileName(location.InternalId));
+                    string bundlePath = Path.Combine(androidPackFolder, CustomAssetPackUtility.CustomAssetPacksAssetsPath, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
                     if (File.Exists(bundlePath))
                     {
                         // Load bundle from the 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent' folder.
