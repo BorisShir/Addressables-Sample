@@ -17,7 +17,7 @@ namespace AddressablesPlayAssetDelivery.Editor
     /// For an Android App Bundle, bundles assigned to a custom asset pack must be located in their {asset pack name}.androidpack directory in the Assets folder.
     ///
     /// This script executes before the <see cref="AddressablesPlayerBuildProcessor"/> which moves all Addressables data to StreamingAssets.
-    public class PlayAssetDeliveryBuildProcessor : BuildPlayerProcessor
+    public class PlayAssetDeliveryBuildProcessor : BuildPlayerProcessor, IPostprocessBuildWithReport
     {
         /// <summary>
         /// Returns the player build processor callback order.
@@ -40,7 +40,8 @@ namespace AddressablesPlayAssetDelivery.Editor
             // need to check that Addressables are built for Android
             if (EditorUserBuildSettings.buildAppBundle && (PlayerSettings.Android.splitApplicationBinary || TextureCompressionProcessor.EnabledTextureCompressionTargeting))
             {
-                MoveDataForAppBundleBuild();
+                MoveDataForAppBundleBuild(true);
+                BuildScriptPlayAssetDelivery.BuildingPlayer = true;
             }
             else
             {
@@ -88,7 +89,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <summary>
         /// Move custom asset pack data from their build location to their App Bundle data location.
         /// </summary>
-        public static void MoveDataForAppBundleBuild()
+        public static void MoveDataForAppBundleBuild(bool moveInstallTimeData)
         {
             try
             {
@@ -98,8 +99,32 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
                     {
-                        MoveTextureCompressionData(TextureCompressionProcessor.TcfPostfix(textureCompression));
+                        var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
+                        MoveTextureCompressionData(postfix);
+                        var targetPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, "AddressablesAssetPack.androidpack", $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{postfix}");
+                        if (Directory.Exists($"{Addressables.BuildPath}{postfix}"))
+                        {
+                            Directory.Move($"{Addressables.BuildPath}{postfix}", targetPath);
+                        }
+                        else if (!Directory.Exists(targetPath))
+                        {
+                            FileUtil.CopyFileOrDirectory(Addressables.BuildPath, targetPath);
+                        }
+                        if (!File.Exists(Path.Combine(targetPath, CustomAssetPackUtility.kCustomAssetPackDataFilename)))
+                            File.Copy(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename),
+                                Path.Combine(targetPath, CustomAssetPackUtility.kCustomAssetPackDataFilename));
                     }
+                }
+                if (moveInstallTimeData)
+                {
+                    var targetPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, "AddressablesAssetPack.androidpack", CustomAssetPackUtility.CustomAssetPacksAssetsPath);
+                    if (!Directory.Exists(targetPath))
+                    {
+                        Directory.Move(Addressables.BuildPath, targetPath);
+                    }
+                    if (!File.Exists(Path.Combine(targetPath, CustomAssetPackUtility.kCustomAssetPackDataFilename)))
+                        File.Copy(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, Addressables.StreamingAssetsSubFolder, CustomAssetPackUtility.kCustomAssetPackDataFilename),
+                            Path.Combine(targetPath, CustomAssetPackUtility.kCustomAssetPackDataFilename));
                 }
             }
             catch (Exception e)
@@ -150,6 +175,17 @@ namespace AddressablesPlayAssetDelivery.Editor
                 AssetDatabase.StopAssetEditing();
             }
         }
+
+        [PostProcessBuildAttribute(1)]
+        public static void OnPostprocessBuild(BuildTarget target, string pathToBuiltProject)
+        {
+            Debug.Log($"Build completed {pathToBuiltProject}");
+        }
+
+        public void OnPostprocessBuild(BuildReport report)
+        {
+            Debug.Log("OnPostprocessBuild");
+        }
     }
 
     /// <summary>
@@ -174,8 +210,9 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android && EditorUserBuildSettings.buildAppBundle && 
                 (PlayerSettings.Android.splitApplicationBinary || TextureCompressionProcessor.EnabledTextureCompressionTargeting))
             {
-                MoveInstallTimeDataToStreamingAssets(buildPlayerContext);
+                //MoveInstallTimeDataToStreamingAssets(buildPlayerContext);
             }
+            BuildScriptPlayAssetDelivery.BuildingPlayer = false;
         }
 
         static void MoveInstallTimeDataToStreamingAssets(BuildPlayerContext buildPlayerContext)
@@ -192,7 +229,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                     // need to check that data for specific texture compression exist (player settings might change)
                     customAssetPackDataPath = Path.Combine($"{Addressables.StreamingAssetsSubFolder}{postfixDst}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
                     buildPlayerContext.AddAdditionalPathToStreamingAssets(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, customAssetPackDataPath), customAssetPackDataPath);
-                    buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
+                    //buildPlayerContext.AddAdditionalPathToStreamingAssets($"{Addressables.BuildPath}{postfixSrc}", $"{Addressables.StreamingAssetsSubFolder}{postfixDst}");
                 }
             }
         }
@@ -230,7 +267,7 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         public void OnPostGenerateGradleAndroidProject(string path)
         {
-            if (!EditorUserBuildSettings.buildAppBundle)
+            /*if (!EditorUserBuildSettings.buildAppBundle)
             {
                 return;
             }
@@ -262,7 +299,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (assetPacksUpdated)
             {
                 // Recheck asset pack sizes here
-            }
+            }*/
         }
     }
 }
