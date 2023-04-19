@@ -102,7 +102,7 @@ namespace AddressablesPlayAssetDelivery
             else
             {
                 // Core Unity asset packs use fast-follow or on-demand delivery and need to be downloaded.
-                string[] coreUnityAssetPackNames = AndroidAssetPacks.GetCoreUnityAssetPackNames(); // only returns names of asset packs that are fast-follow or on-demand delivery
+                var coreUnityAssetPackNames = AndroidAssetPacks.GetCoreUnityAssetPackNames(); // only returns names of asset packs that are fast-follow or on-demand delivery
                 if (coreUnityAssetPackNames.Length == 0)
                     CompleteOverride("Cannot retrieve core Unity asset pack names. PlayCore Plugin is not installed.");
                 else
@@ -123,10 +123,10 @@ namespace AddressablesPlayAssetDelivery
 
         void DownloadCustomAssetPacksData()
         {
-            UnityWebRequest www = UnityWebRequest.Get(CustomAssetPackUtility.CustomAssetPacksDataRuntimePath);
+            var www = UnityWebRequest.Get(CustomAssetPackUtility.CustomAssetPacksDataRuntimePath);
             www.SendWebRequest().completed += (op) =>
             {
-                UnityWebRequest www = (op as UnityWebRequestAsyncOperation).webRequest;
+                var www = (op as UnityWebRequestAsyncOperation).webRequest;
                 if (www.result != UnityWebRequest.Result.Success)
                     CompleteOverride($"Could not load '{CustomAssetPackUtility.kCustomAssetPackDataFilename}' : {www.error}.");
                 else
@@ -143,7 +143,7 @@ namespace AddressablesPlayAssetDelivery
             CustomAssetPackData customPackData =  JsonUtility.FromJson<CustomAssetPackData>(contents);
             foreach (CustomAssetPackDataEntry entry in customPackData.Entries)
             {
-                foreach (string bundle in entry.AssetBundles)
+                foreach (var bundle in entry.AssetBundles)
                 {
                     PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.Add(bundle, entry);
                 }
@@ -168,7 +168,7 @@ namespace AddressablesPlayAssetDelivery
             }
             else if (info.status == AndroidAssetPackStatus.Completed)
             {
-                string assetPackPath = AndroidAssetPacks.GetAssetPackPath(info.name);
+                var assetPackPath = AndroidAssetPacks.GetAssetPackPath(info.name);
                 if (string.IsNullOrEmpty(assetPackPath))
                     CompleteOverride($"Downloaded asset pack '{info.name}' but cannot locate it on device.");
                 else if (AndroidAssetPacks.coreUnityAssetPacksDownloaded)
@@ -180,10 +180,10 @@ namespace AddressablesPlayAssetDelivery
         {
             if (location.ResourceType == typeof(IAssetBundleResource))
             {
-                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
+                var bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
                 if (PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
                 {
-                    string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
+                    var assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
                     if (PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.ContainsKey(assetPackName))
                     {
                         // Load bundle that was assigned to a custom fast-follow or on-demand asset pack.
@@ -201,12 +201,12 @@ namespace AddressablesPlayAssetDelivery
         {
             if (location.ResourceType == typeof(IAssetBundleResource))
             {
-                string bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
+                var bundleName = Path.GetFileNameWithoutExtension(location.InternalId.Replace("\\", "/"));
                 if (PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
                 {
-                    string assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
-                    string androidPackFolder = $"{CustomAssetPackUtility.PackContentRootDirectory}/{assetPackName}.androidpack";
-                    string bundlePath = Path.Combine(androidPackFolder, CustomAssetPackUtility.CustomAssetPacksAssetsPath, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
+                    var assetPackName = PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack[bundleName].AssetPackName;
+                    var androidPackFolder = $"{CustomAssetPackUtility.PackContentRootDirectory}/{assetPackName}.androidpack";
+                    var bundlePath = Path.Combine(androidPackFolder, CustomAssetPackUtility.CustomAssetPacksAssetsPath, "Android", Path.GetFileName(location.InternalId.Replace("\\", "/")));
                     if (File.Exists(bundlePath))
                     {
                         // Load bundle from the 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent' folder.

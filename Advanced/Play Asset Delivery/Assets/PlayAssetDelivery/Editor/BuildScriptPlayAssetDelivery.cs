@@ -20,6 +20,8 @@ namespace AddressablesPlayAssetDelivery.Editor
         internal static bool EnabledTextureCompressionTargeting => PlayerSettings.Android.textureCompressionFormats.Length > 1 &&
             EditorUserBuildSettings.overrideTextureCompression != OverrideTextureCompression.ForceUncompressed;
 
+        internal static bool UseCustomAssetPacks => EditorUserBuildSettings.buildAppBundle && (PlayerSettings.Android.splitApplicationBinary || EnabledTextureCompressionTargeting);
+
         private static MobileTextureSubtarget m_StoredTextureCompressionFormat;
         private static int m_Current;
 
@@ -84,6 +86,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         }
     }
 
+    // TODO rewrite
     /// <summary>
     /// In addition to the Default Build Script behavior (building AssetBundles), this script assigns Android bundled content to "install-time" or "on-demand" custom asset packs
     /// specified in <see cref="CustomAssetPackSettings"/>.
@@ -147,14 +150,20 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
-        public static bool BuildingPlayer { get; set; } = false;
-
         protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
         {
+            // Don't prepare content for asset packs if the build target isn't set to Android
+            if (builderInput.Target != BuildTarget.Android)
+            {
+                Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
+                return base.BuildDataImplementation<TResult>(builderInput);
+            }
+
             TResult result = AddressableAssetBuildResult.CreateResult<TResult>("", 0);
             m_AssetPacksNames.Clear();
+            m_AssetPacksNames[""] = CustomAssetPackUtility.kAddressablesAssetPackName; // to avoid using this name for groups
             PlayAssetDeliveryBuildProcessor.MoveDataToDefaultLocation();
-            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && builderInput.Target == BuildTarget.Android)
+            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
             {
                 CreateBuildOutputFolders(PlayerSettings.Android.textureCompressionFormats);
                 TextureCompressionProcessor.Start();
@@ -163,7 +172,6 @@ namespace AddressablesPlayAssetDelivery.Editor
                     while (TextureCompressionProcessor.Next())
                     {
                         AssetDatabase.Refresh();
-                        // consider trying to change builderInput so result is generated in the correct catalog
                         AddResult(ref result, base.BuildDataImplementation<TResult>(builderInput));
                     }
                 }
@@ -174,16 +182,13 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
             else
             {
-                if (builderInput.Target == BuildTarget.Android)
-                {
-                    CreateBuildOutputFolders();
-                }
+                CreateBuildOutputFolders();
                 result = base.BuildDataImplementation<TResult>(builderInput);
             }
 
-            if (EditorUserBuildSettings.buildAppBundle && (PlayerSettings.Android.splitApplicationBinary || TextureCompressionProcessor.EnabledTextureCompressionTargeting))
+            if (TextureCompressionProcessor.UseCustomAssetPacks)
             {
-                PlayAssetDeliveryBuildProcessor.MoveDataForAppBundleBuild(BuildingPlayer);
+                PlayAssetDeliveryBuildProcessor.MoveDataForAppBundleBuild();
             }
 
             return result;
@@ -193,11 +198,8 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             // Build AssetBundles
             TResult result = base.DoBuild<TResult>(builderInput, aaContext);
-
-            // Don't prepare content for asset packs if the build target isn't set to Android
             if (builderInput.Target != BuildTarget.Android)
             {
-                Addressables.LogWarning("Build target is not set to Android. No custom asset pack config files will be created.");
                 return result;
             }
 
@@ -215,7 +217,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             try
             {
                 ClearJsonFiles();
-                ClearBundlesInAssetsFolder();
+                ClearCustomAssetPacksContent();
             }
             catch (Exception e)
             {
@@ -223,13 +225,18 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
-        void ClearBundlesInAssetsFolder()
+        void ClearCustomAssetPacksContent()
         {
             if (AssetDatabase.IsValidFolder(CustomAssetPackUtility.PackContentRootDirectory))
             {
-                // Delete all bundle files in 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent'
-                List<string> bundleFiles = Directory.EnumerateFiles(CustomAssetPackUtility.PackContentRootDirectory, "*.bundle", SearchOption.AllDirectories).ToList();
-                foreach (string file in bundleFiles)
+                // Delete all bundle and json files in 'Assets/PlayAssetDelivery/Build/CustomAssetPackContent'
+                var bundleFiles = Directory.EnumerateFiles(CustomAssetPackUtility.PackContentRootDirectory, "*.bundle", SearchOption.AllDirectories).ToList();
+                foreach (var file in bundleFiles)
+                {
+                    AssetDatabase.DeleteAsset(file);
+                }
+                var jsonFiles = Directory.EnumerateFiles(CustomAssetPackUtility.PackContentRootDirectory, "*.json", SearchOption.AllDirectories).ToList();
+                foreach (var file in jsonFiles)
                 {
                     AssetDatabase.DeleteAsset(file);
                 }
@@ -242,17 +249,20 @@ namespace AddressablesPlayAssetDelivery.Editor
 
             foreach (var dir in dirs)
             {
-                // Delete "CustomAssetPacksData.json"
-                var file = Path.Combine(dir, CustomAssetPackUtility.kCustomAssetPackDataFilename);
-                if (File.Exists(file))
-                    AssetDatabase.DeleteAsset(file);
-
                 // Delete "BuildProcessorData.json"
-                file = Path.Combine(dir, CustomAssetPackUtility.kBuildProcessorDataFilename);
+                var file = Path.Combine(dir, CustomAssetPackUtility.kBuildProcessorDataFilename);
                 if (File.Exists(file))
+                {
                     AssetDatabase.DeleteAsset(file);
+                }
 
-                // do we need to delete directories as well?
+                // TODO do we need to delete directories as well?
+            }
+
+            // Delete "CustomAssetPacksData.json"
+            if (File.Exists(CustomAssetPackUtility.CustomAssetPacksDataEditorPath))
+            {
+                AssetDatabase.DeleteAsset(CustomAssetPackUtility.CustomAssetPacksDataEditorPath);
             }
         }
 
@@ -262,8 +272,8 @@ namespace AddressablesPlayAssetDelivery.Editor
             var bundleIdToEditorDataEntry = new Dictionary<string, BuildProcessorDataEntry>();
             var bundleIdToEditorDataEntryDefault = new Dictionary<string, BuildProcessorDataEntry>();
 
-            string androidPackDir = CreateAssetPackDirectory("AddressablesAssetPack", false);
-            CreateOrEditGradleFile(androidPackDir, "AddressablesAssetPack", DeliveryType.InstallTime);
+            var androidPackDir = CreateAssetPackDirectory(CustomAssetPackUtility.kAddressablesAssetPackName);
+            CreateOrEditGradleFile(androidPackDir, CustomAssetPackUtility.kAddressablesAssetPackName, DeliveryType.InstallTime);
 
             foreach (AddressableAssetGroup group in settings.groups)
             {
@@ -271,13 +281,15 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     var assetPackSchema = group.GetSchema<PlayAssetDeliverySchema>();
                     DeliveryType deliveryType = DeliveryType.None;
-                    string assetPackName = "";
+                    var assetPackName = "";
                     if (assetPackSchema.IncludeInAssetPack)
                     {
                         List<CustomAssetPackEditorInfo> customAssetPacks = customAssetPackSettings.CustomAssetPacks;
                         // Reset schema data to match Custom Asset Pack Settings. This can occur when the CustomAssetPackSettings was deleted but the schema properties still use the old settings data.
                         if (resetAssetPackSchemaData || assetPackSchema.AssetPackIndex >= customAssetPacks.Count)
+                        {
                             assetPackSchema.ResetAssetPackIndex();
+                        }
 
                         var assetPack = customAssetPacks[assetPackSchema.AssetPackIndex];
                         deliveryType = assetPack.DeliveryType;
@@ -297,10 +309,27 @@ namespace AddressablesPlayAssetDelivery.Editor
                             m_AssetPacksNames[group.Name] = assetPackName;
                         }
                     }
+                    // install-time addressable groups are all packed to AddressablesAssetPack
+                    if (deliveryType == DeliveryType.InstallTime)
+                    {
+                        assetPackName = CustomAssetPackUtility.kAddressablesAssetPackName;
+                    }
 
                     if (IsAssignedToCustomAssetPack(settings, group, assetPackSchema, deliveryType))
                     {
                         CreateConfigFiles(group, assetPackName, deliveryType, assetPackToDataEntry, bundleIdToEditorDataEntry, bundleIdToEditorDataEntryDefault);
+                    }
+                }
+                else if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && !TextureCompressionProcessor.IsLast)
+                {
+                    // delete non Play Asset Delivery bundles for non-default texture compression
+                    foreach (var entry in group.entries)
+                    {
+                        var bundleFilePath = AddressablesRuntimeProperties.EvaluateString(entry.BundleFileId);
+                        if (File.Exists(bundleFilePath))
+                        {
+                            File.Delete(bundleFilePath);
+                        }
                     }
                 }
             }
@@ -313,27 +342,45 @@ namespace AddressablesPlayAssetDelivery.Editor
             // Create the CustomAssetPacksData.json file. It contains all custom asset pack information that can be used at runtime.
             SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), postfix);
 
-            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
+            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && TextureCompressionProcessor.IsLast)
             {
-                if (TextureCompressionProcessor.IsLast)
-                {
-                    // Create json files for the default variant.
-                    SerializeBuildProcessorData(bundleIdToEditorDataEntryDefault.Values.ToList(), "");
-                    SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), "");
-                    // probably copy link.xml file to Assets/PlayAssetDelivery/Build
-                }
-                else
-                {
-                    // we need only one link.xml file which would be the same for all texture compression variants
-                    Directory.Delete(Path.Combine(Addressables.BuildPath, "AddressablesLink"), true);
+                // Create json files for the default variant.
+                SerializeBuildProcessorData(bundleIdToEditorDataEntryDefault.Values.ToList(), "");
+                SerializeCustomAssetPacksData(assetPackToDataEntry.Values.ToList(), "");
+            }
 
-                    var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
-                    if (Directory.Exists(tcfBuildPath))
-                    {
-                        Directory.Delete(tcfBuildPath, true);
-                    }
-                    Directory.Move(Addressables.BuildPath, tcfBuildPath);
+            var addressablesLink = Path.Combine(Addressables.BuildPath, "AddressablesLink");
+            if (!TextureCompressionProcessor.EnabledTextureCompressionTargeting || TextureCompressionProcessor.IsLast)
+            {
+                // move link.xml to Build folder
+                var addressablesBuildLink = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, "AddressablesLink");
+                if (Directory.Exists(addressablesBuildLink))
+                {
+                    Directory.Delete(addressablesBuildLink, true);
                 }
+                Directory.Move(addressablesLink, addressablesBuildLink);
+            }
+            else
+            {
+                // we need only one link.xml file which would be the same for all texture compression variants
+                Directory.Delete(addressablesLink, true);
+
+                // moving generated files to the texture compression specific directory
+                var tcfBuildPath = $"{Addressables.BuildPath}{postfix}";
+                if (Directory.Exists(tcfBuildPath))
+                {
+                    Directory.Delete(tcfBuildPath, true);
+                }
+                Directory.Move(Addressables.BuildPath, tcfBuildPath);
+            }
+        }
+
+        void CreateBuildOutputFolder(string postfix)
+        {
+            var folderWithPostfix = $"{Addressables.StreamingAssetsSubFolder}{postfix}";
+            if (!AssetDatabase.IsValidFolder(Path.Combine(CustomAssetPackUtility.BuildRootDirectory, folderWithPostfix)))
+            {
+                AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, folderWithPostfix);
             }
         }
 
@@ -349,17 +396,14 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (!AssetDatabase.IsValidFolder(CustomAssetPackUtility.PackContentRootDirectory))
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, CustomAssetPackUtility.kPackContentFolderName);
             else
-                ClearBundlesInAssetsFolder();
+                ClearCustomAssetPacksContent();
 
-            if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}"))
-                AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, Addressables.StreamingAssetsSubFolder);
+            CreateBuildOutputFolder("");
             if (textureCompressions != null)
             {
                 foreach (var textureCompression in textureCompressions)
                 {
-                    var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
-                    if (!AssetDatabase.IsValidFolder($"{CustomAssetPackUtility.BuildRootDirectory}/{Addressables.StreamingAssetsSubFolder}{postfix}"))
-                        AssetDatabase.CreateFolder(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+                    CreateBuildOutputFolder(TextureCompressionProcessor.TcfPostfix(textureCompression));
                 }
             }
         }
@@ -369,18 +413,38 @@ namespace AddressablesPlayAssetDelivery.Editor
             return buildPath.StartsWith(Addressables.BuildPath) || buildPath.StartsWith(Application.streamingAssetsPath);
         }
 
-        string ConstructAssetPackDirectoryName(string assetPackName)
+        static internal string ConstructAssetPackDirectoryName(string assetPackName)
         {
             return $"{assetPackName}.androidpack";
         }
 
-        string CreateAssetPackDirectory(string assetPackName, bool lastLevel)
+        static internal string AddressableAssetPackAssetsPath(string postfix)
         {
-            string folderName = ConstructAssetPackDirectoryName(assetPackName);
-            string path = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, folderName).Replace("\\", "/");
+            return Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, ConstructAssetPackDirectoryName(CustomAssetPackUtility.kAddressablesAssetPackName), $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{postfix}");
+        }
+
+        void CreateLastSubfolder(string assetPath, string folderName)
+        {
+            if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, folderName)))
+            {
+                AssetDatabase.CreateFolder(assetPath, folderName);
+            }
+            assetPath = Path.Combine(assetPath, folderName);
+            if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, "Android")))
+            {
+                AssetDatabase.CreateFolder(assetPath, "Android");
+            }
+        }
+
+        string CreateAssetPackDirectory(string assetPackName)
+        {
+            var folderName = ConstructAssetPackDirectoryName(assetPackName);
+            var path = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, folderName).Replace("\\", "/");
 
             if (!AssetDatabase.IsValidFolder(path))
+            {
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.PackContentRootDirectory, folderName);
+            }
 
             var assetPath = path;
             var folders = CustomAssetPackUtility.CustomAssetPacksAssetsPath.Split('/');
@@ -388,37 +452,28 @@ namespace AddressablesPlayAssetDelivery.Editor
             {
                 var newPath = Path.Combine(assetPath, folders[i]);
                 if (!AssetDatabase.IsValidFolder(newPath))
+                {
                     AssetDatabase.CreateFolder(assetPath, folders[i]);
+                }
                 assetPath = newPath;
             }
-            if (lastLevel)
+            if (TextureCompressionProcessor.IsLast)
             {
-                var tcfSubfolder = folders[^1];
-                if (TextureCompressionProcessor.IsLast)
-                {
-                    if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, tcfSubfolder)))
-                        AssetDatabase.CreateFolder(assetPath, tcfSubfolder);
-                    var lastPath = Path.Combine(assetPath, tcfSubfolder);
-                    if (!AssetDatabase.IsValidFolder(Path.Combine(lastPath, "Android")))
-                        AssetDatabase.CreateFolder(lastPath, "Android");
-                }
-                tcfSubfolder += TextureCompressionProcessor.TcfPostfix();
-                if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, tcfSubfolder)))
-                    AssetDatabase.CreateFolder(assetPath, tcfSubfolder);
-                assetPath = Path.Combine(assetPath, tcfSubfolder);
-                if (!AssetDatabase.IsValidFolder(Path.Combine(assetPath, "Android")))
-                    AssetDatabase.CreateFolder(assetPath, "Android");
+                CreateLastSubfolder(assetPath, folders[^1]);
             }
+            CreateLastSubfolder(assetPath, $"{folders[^1]}{TextureCompressionProcessor.TcfPostfix()}");
             return path;
         }
 
         bool HasRequiredSchemas(AddressableAssetSettings settings, AddressableAssetGroup group)
         {
-            bool hasBundledSchema = group.HasSchema<BundledAssetGroupSchema>();
-            bool hasPADSchema = group.HasSchema<PlayAssetDeliverySchema>();
+            var hasBundledSchema = group.HasSchema<BundledAssetGroupSchema>();
+            var hasPADSchema = group.HasSchema<PlayAssetDeliverySchema>();
 
             if (!hasBundledSchema && !hasPADSchema)
+            {
                 return false;
+            }
             if (!hasBundledSchema && hasPADSchema)
             {
                 Addressables.LogWarning($"Group '{group.name}' has a '{typeof(PlayAssetDeliverySchema).Name}' but not a '{typeof(BundledAssetGroupSchema).Name}'. " +
@@ -428,9 +483,10 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (hasBundledSchema && !hasPADSchema)
             {
                 var bundledSchema = group.GetSchema<BundledAssetGroupSchema>();
-                string buildPath = bundledSchema.BuildPath.GetValue(settings);
+                var buildPath = bundledSchema.BuildPath.GetValue(settings);
                 if (BuildPathIncludedInStreamingAssets(buildPath))
                 {
+                    // check what happens if TC is on
                     Addressables.Log($"Group '{group.name}' does not have a '{typeof(PlayAssetDeliverySchema).Name}' but its build path '{buildPath}' will be included in StreamingAssets at build time. " +
                         $"The group will be assigned to the generated asset packs unless its build path is changed.");
                 }
@@ -444,7 +500,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (!schema.IncludeInAssetPack && schema.AssetPackDeliveryType == DeliveryType.None)
             {
                 var bundledSchema = group.GetSchema<BundledAssetGroupSchema>();
-                string buildPath = bundledSchema.BuildPath.GetValue(settings);
+                var buildPath = bundledSchema.BuildPath.GetValue(settings);
                 if (BuildPathIncludedInStreamingAssets(buildPath))
                 {
                     // need to check what happens with TC targeting in this case
@@ -452,12 +508,6 @@ namespace AddressablesPlayAssetDelivery.Editor
                 }
                 return false;
             }
-            // Comment if we want to create separate asset pack(s) for install-time addressables
-            if (deliveryType == DeliveryType.InstallTime)
-            {
-                return false;
-            }
-
             return true;
         }
 
@@ -478,7 +528,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 {
                     // Create .androidpack directory and gradle file for the asset pack
                     assetPackToDataEntry[assetPackName] = new CustomAssetPackDataEntry(assetPackName, deliveryType, new List<string>() { bundleName });
-                    string androidPackDir = CreateAssetPackDirectory(assetPackName, true);
+                    string androidPackDir = CreateAssetPackDirectory(assetPackName);
                     CreateOrEditGradleFile(androidPackDir, assetPackName, deliveryType);
                 }
                 else
@@ -489,11 +539,11 @@ namespace AddressablesPlayAssetDelivery.Editor
 
                 // Store the bundle's build path and its corresponding .androidpack folder location
                 var bundlePackDir = ConstructAssetPackDirectoryName(assetPackName);
-                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{TextureCompressionProcessor.TcfPostfix()}/Android", bundleFileName);
+                var assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{TextureCompressionProcessor.TcfPostfix()}", "Android", bundleFileName);
                 bundleIdToEditorDataEntry.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
                 if (TextureCompressionProcessor.IsLast)
                 {
-                    assetsFolderPath = Path.Combine(bundlePackDir, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}/Android", bundleFileName);
+                    assetsFolderPath = Path.Combine(bundlePackDir, CustomAssetPackUtility.CustomAssetPacksAssetsPath, "Android", bundleFileName);
                     bundleIdToEditorDataEntryDefault.Add(entry.BundleFileId, new BuildProcessorDataEntry(bundleBuildPath, assetsFolderPath));
                 }
             }
@@ -503,6 +553,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         {
             if (deliveryType == DeliveryType.None)
             {
+                // TODO check if this condition is required
                 Addressables.Log($"Asset pack '{assetPackName}' has its delivery type set to 'None'. " +
                     $"No gradle file will be created for this asset pack. Unity assumes that any custom asset packs with no gradle file use on-demand delivery.");
                 return;
@@ -518,9 +569,9 @@ namespace AddressablesPlayAssetDelivery.Editor
 
 #if UNITY_ANDROID
             // Create or edit the 'build.gradle' file in the .androidpack directory
-            string deliveryTypeString = CustomAssetPackUtility.DeliveryTypeToGradleString(deliveryType);
-            string buildFilePath = Path.Combine(androidPackDir, "build.gradle");
-            string content = $"apply plugin: 'com.android.asset-pack'\n\nassetPack {{\n\tpackName = \"{assetPackName}\"\n\tdynamicDelivery {{\n\t\tdeliveryType = \"{deliveryTypeString}\"\n\t}}\n}}";
+            var deliveryTypeString = CustomAssetPackUtility.DeliveryTypeToGradleString(deliveryType);
+            var buildFilePath = Path.Combine(androidPackDir, "build.gradle");
+            var content = $"apply plugin: 'com.android.asset-pack'\n\nassetPack {{\n\tpackName = \"{assetPackName}\"\n\tdynamicDelivery {{\n\t\tdeliveryType = \"{deliveryTypeString}\"\n\t}}\n}}";
             File.WriteAllText(buildFilePath, content);
 #endif
         }
@@ -528,7 +579,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         void SerializeBuildProcessorData(List<BuildProcessorDataEntry> entries, string postfix)
         {
             var customPackEditorData = new BuildProcessorData(entries);
-            string contents = JsonUtility.ToJson(customPackEditorData);
+            var contents = JsonUtility.ToJson(customPackEditorData);
             var jsonPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kBuildProcessorDataFilename);
             File.WriteAllText(jsonPath, contents);
         }
@@ -536,9 +587,18 @@ namespace AddressablesPlayAssetDelivery.Editor
         void SerializeCustomAssetPacksData(List<CustomAssetPackDataEntry> entries, string postfix)
         {
             var customPackData = new CustomAssetPackData(entries);
-            string contents = JsonUtility.ToJson(customPackData);
-            var jsonPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kCustomAssetPackDataFilename);
-            File.WriteAllText(jsonPath, contents);
+            var contents = JsonUtility.ToJson(customPackData);
+            if (postfix != "" || TextureCompressionProcessor.UseCustomAssetPacks)
+            {
+                // no need to write variant for the default texture compression if we are not using custom asset packs
+                var jsonPath = Path.Combine(AddressableAssetPackAssetsPath(postfix), CustomAssetPackUtility.kCustomAssetPackDataFilename);
+                File.WriteAllText(jsonPath, contents);
+            }
+            if (postfix == "")
+            {
+                // need to write default variant outside of the custom asset packs to be used for Editor Play Mode
+                File.WriteAllText(CustomAssetPackUtility.CustomAssetPacksDataEditorPath, contents);
+            }
         }
     }
 }
