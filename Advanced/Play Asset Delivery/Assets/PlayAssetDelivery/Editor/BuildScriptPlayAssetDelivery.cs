@@ -150,6 +150,46 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
+        Dictionary<AddressableAssetGroup, string> m_BuildPathRestore = new Dictionary<AddressableAssetGroup, string>();
+        Dictionary<AddressableAssetGroup, string> m_LoadPathRestore = new Dictionary<AddressableAssetGroup, string>();
+
+        void SetLocalBuildLoadPaths(IEnumerable<AddressableAssetGroup> groups)
+        {
+            foreach (var group in groups)
+            {
+                if (group.HasSchema<PlayAssetDeliverySchema>() && group.HasSchema<BundledAssetGroupSchema>())
+                {
+                    var schema = group.GetSchema<BundledAssetGroupSchema>();
+                    if (schema.BuildPath.GetName(group.Settings) != AddressableAssetSettings.kLocalBuildPath)
+                    {
+                        m_BuildPathRestore[group] = schema.BuildPath.Id;
+                        schema.BuildPath.SetVariableByName(group.Settings, AddressableAssetSettings.kLocalBuildPath);
+                    }
+                    if (schema.LoadPath.GetName(group.Settings) != AddressableAssetSettings.kLocalLoadPath)
+                    {
+                        m_LoadPathRestore[group] = schema.LoadPath.Id;
+                        schema.LoadPath.SetVariableByName(group.Settings, AddressableAssetSettings.kLocalLoadPath);
+                    }
+                }
+            }
+        }
+
+        void RestoreBuildLoadPaths()
+        {
+            foreach (var bp in m_BuildPathRestore)
+            {
+                var schema = bp.Key.GetSchema<BundledAssetGroupSchema>();
+                schema.BuildPath.SetVariableById(bp.Key.Settings, bp.Value);
+            }
+            m_BuildPathRestore.Clear();
+            foreach (var lp in m_LoadPathRestore)
+            {
+                var schema = lp.Key.GetSchema<BundledAssetGroupSchema>();
+                schema.LoadPath.SetVariableById(lp.Key.Settings, lp.Value);
+            }
+            m_LoadPathRestore.Clear();
+        }
+
         protected override TResult BuildDataImplementation<TResult>(AddressablesDataBuilderInput builderInput)
         {
             // Don't prepare content for asset packs if the build target isn't set to Android
@@ -163,6 +203,8 @@ namespace AddressablesPlayAssetDelivery.Editor
             m_AssetPacksNames.Clear();
             m_AssetPacksNames[""] = CustomAssetPackUtility.kAddressablesAssetPackName; // to avoid using this name for groups
             PlayAssetDeliveryBuildProcessor.MoveDataToDefaultLocation();
+
+            SetLocalBuildLoadPaths(builderInput.AddressableSettings.groups);
             if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
             {
                 CreateBuildOutputFolders(PlayerSettings.Android.textureCompressionFormats);
@@ -185,6 +227,7 @@ namespace AddressablesPlayAssetDelivery.Editor
                 CreateBuildOutputFolders();
                 result = base.BuildDataImplementation<TResult>(builderInput);
             }
+            RestoreBuildLoadPaths();
 
             if (TextureCompressionProcessor.UseCustomAssetPacks)
             {
