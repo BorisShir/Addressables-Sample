@@ -7,6 +7,8 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.Callbacks;
 using UnityEditor.Android;
+using UnityEditor.AddressableAssets;
+using UnityEditor.AddressableAssets.Settings;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
@@ -22,12 +24,11 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <summary>
         /// Returns the player build processor callback order.
         /// </summary>
-        public override int callbackOrder
-        {
-            get { return 0; }
-        }
+        public override int callbackOrder => 0;
 
         static internal bool BuildingPlayer { get; set; } = false;
+
+        static internal int DataBuilderIndex { get; set; } = 0;
 
         /// <summary>
         /// Invoked before performing a Player build. Moves AssetBundles to their correct data location based on the build target platform.
@@ -43,6 +44,13 @@ namespace AddressablesPlayAssetDelivery.Editor
             // need to check that Addressables are built for Android
             if (TextureCompressionProcessor.UseCustomAssetPacks)
             {
+                DataBuilderIndex = AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex;
+                var padBuildScriptIndex = AddressableAssetSettingsDefaultObject.Settings.DataBuilders.FindIndex(b => b is BuildScriptPlayAssetDelivery);
+                if (padBuildScriptIndex == -1)
+                {
+                    // TODO handle situation when PAD build script is not available
+                }
+                AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex = padBuildScriptIndex;
                 BuildingPlayer = true;
                 MoveDataForAppBundleBuild();
             }
@@ -52,43 +60,45 @@ namespace AddressablesPlayAssetDelivery.Editor
             }
         }
 
-        static void MoveBundlesToCustomAssetPacks(string postfix)
+        static bool MoveBundlesToCustomAssetPacks(string postfix)
         {
             var buildProcessorDataPath = Path.Combine(CustomAssetPackUtility.BuildRootDirectory, $"{Addressables.StreamingAssetsSubFolder}{postfix}", CustomAssetPackUtility.kBuildProcessorDataFilename);
-            if (File.Exists(buildProcessorDataPath))
+            if (!File.Exists(buildProcessorDataPath))
             {
-                var contents = File.ReadAllText(buildProcessorDataPath);
-                var data = JsonUtility.FromJson<BuildProcessorData>(contents);
+                return false;
+            }
+            var contents = File.ReadAllText(buildProcessorDataPath);
+            var data = JsonUtility.FromJson<BuildProcessorData>(contents);
 
-                foreach (BuildProcessorDataEntry entry in data.Entries)
+            foreach (BuildProcessorDataEntry entry in data.Entries)
+            {
+                if (!File.Exists(entry.BundleBuildPath))
                 {
-                    if (!File.Exists(entry.BundleBuildPath))
+                    // already moved
+                    continue;
+                }
+                var assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
+                if (File.Exists(assetsFolderPath))
+                {
+                    File.Delete(assetsFolderPath);
+                }
+                if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && string.IsNullOrEmpty(postfix))
+                {
+                    File.Copy(entry.BundleBuildPath, assetsFolderPath);
+                }
+                else
+                {
+                    var metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);
+                    File.Move(entry.BundleBuildPath, assetsFolderPath);
+                    if (File.Exists(metaFilePath))
                     {
-                        // already moved
-                        continue;
-                    }
-                    var assetsFolderPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, entry.AssetsSubfolderPath);
-                    if (File.Exists(assetsFolderPath))
-                    {
-                        File.Delete(assetsFolderPath);
-                    }
-                    if (TextureCompressionProcessor.EnabledTextureCompressionTargeting && string.IsNullOrEmpty(postfix))
-                    {
-                        File.Copy(entry.BundleBuildPath, assetsFolderPath);
-                    }
-                    else
-                    {
-                        var metaFilePath = AssetDatabase.GetTextMetaFilePathFromAssetPath(entry.BundleBuildPath);
-                        File.Move(entry.BundleBuildPath, assetsFolderPath);
-                        if (File.Exists(metaFilePath))
-                        {
-                            // metafile might exist only if BuildPath is not default "LocalBuildPath"
-                            // and points to something inside Assets folder
-                            File.Delete(metaFilePath);
-                        }
+                        // metafile might exist only if BuildPath is not default "LocalBuildPath"
+                        // and points to something inside Assets folder
+                        File.Delete(metaFilePath);
                     }
                 }
             }
+            return true;
         }
 
         static readonly string[] SharedFilesMasks =
@@ -133,7 +143,11 @@ namespace AddressablesPlayAssetDelivery.Editor
             try
             {
                 AssetDatabase.StartAssetEditing();
-                MoveBundlesToCustomAssetPacks("");
+                if (!MoveBundlesToCustomAssetPacks(""))
+                {
+                    // Addressables are not built for PAD yet
+                    return;
+                }
                 var addressablesAssetPackFolder = BuildScriptPlayAssetDelivery.ConstructAssetPackDirectoryName(CustomAssetPackUtility.kAddressablesAssetPackName);
 
                 if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
@@ -142,7 +156,6 @@ namespace AddressablesPlayAssetDelivery.Editor
                     {
                         var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
                         MoveBundlesToCustomAssetPacks(postfix);
-
                         var targetPath = Path.Combine(CustomAssetPackUtility.PackContentRootDirectory, addressablesAssetPackFolder, $"{CustomAssetPackUtility.CustomAssetPacksAssetsPath}{postfix}");
                         var sourcePath = $"{Addressables.BuildPath}{postfix}";
                         var copyFiles = false;
@@ -259,10 +272,7 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <summary>
         /// Returns the player build processor callback order.
         /// </summary>
-        public override int callbackOrder
-        {
-            get { return 2; }
-        }
+        public override int callbackOrder => 2;
 
         /// <summary>
         /// Invoked before performing a Player build. Moves AssetBundles to their correct data location based on the build target platform.
@@ -270,7 +280,9 @@ namespace AddressablesPlayAssetDelivery.Editor
         /// <param name="buildPlayerContext">Contains data related to the player.</param>
         public override void PrepareForBuild(BuildPlayerContext buildPlayerContext)
         {
+            // TODO probably need to check here that bundles exist for all TC variants
             PlayAssetDeliveryBuildProcessor.BuildingPlayer = false;
+            AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex = PlayAssetDeliveryBuildProcessor.DataBuilderIndex;
         }
 
         public void OnPostGenerateGradleAndroidProject(string path)
