@@ -32,7 +32,9 @@ namespace AddressablesPlayAssetDelivery
         {
             var initializeData = JsonUtility.FromJson<PlayAssetDeliveryInitializationData>(data);
             if (initializeData != null)
+            {
                 return initializeData.LogWarnings;
+            }
             return true;
         }
 
@@ -65,23 +67,26 @@ namespace AddressablesPlayAssetDelivery
         protected override bool InvokeWaitForCompletion()
         {
             if (!m_HasExecuted)
+            {
                 Execute();
+            }
             return m_IsDone;
         }
 
         void CompleteOverride(string warningMsg)
         {
             if (m_LogWarnings && warningMsg != null)
+            {
                 Debug.LogWarning($"{warningMsg} Default internal id locations will be used instead.");
+            }
             Complete(true, true, "");
             m_IsDone = true;
         }
 
         protected override void Execute()
         {
-            Addressables.ResourceManager.ResourceProviders.Add(new PlayAssetDeliveryAssetBundleProvider());
 #if UNITY_ANDROID && !UNITY_EDITOR
-            LoadFromAssetPacksIfAvailable();
+            DownloadCustomAssetPacksData();
 #elif UNITY_ANDROID && UNITY_EDITOR
             LoadFromEditorData();
 #else
@@ -90,32 +95,16 @@ namespace AddressablesPlayAssetDelivery
             m_HasExecuted = true;
         }
 
-        void LoadFromAssetPacksIfAvailable()
-        {
-            // Downloading core asset packs is required to make sure that CustomAssetPacksDataRuntimePath file is available
-            // we can leave this logic, but if this file goes to TC asset pack, then it always would be "install-time"
-            if (AndroidAssetPacks.coreUnityAssetPacksDownloaded)
-            {
-                // Core Unity asset packs use install-time delivery and are already installed.
-                DownloadCustomAssetPacksData();
-            }
-            else
-            {
-                // Core Unity asset packs use fast-follow or on-demand delivery and need to be downloaded.
-                var coreUnityAssetPackNames = AndroidAssetPacks.GetCoreUnityAssetPackNames(); // only returns names of asset packs that are fast-follow or on-demand delivery
-                if (coreUnityAssetPackNames.Length == 0)
-                    CompleteOverride("Cannot retrieve core Unity asset pack names. PlayCore Plugin is not installed.");
-                else
-                    AndroidAssetPacks.DownloadAssetPackAsync(coreUnityAssetPackNames, CheckDownloadStatus);
-            }
-        }
-
         void LoadFromEditorData()
         {
             if (File.Exists(CustomAssetPackUtility.CustomAssetPacksDataEditorPath))
+            {
                 InitializeBundleToAssetPackMap(File.ReadAllText(CustomAssetPackUtility.CustomAssetPacksDataEditorPath));
+            }
             else if (File.Exists(CustomAssetPackUtility.CustomAssetPacksDataRuntimePath))
+            {
                 InitializeBundleToAssetPackMap(File.ReadAllText(CustomAssetPackUtility.CustomAssetPacksDataRuntimePath));
+            }
 
             Addressables.ResourceManager.InternalIdTransformFunc = EditorTransformFunc;
             CompleteOverride(null);
@@ -123,12 +112,16 @@ namespace AddressablesPlayAssetDelivery
 
         void DownloadCustomAssetPacksData()
         {
+            // CustomAssetPacksDataRuntimePath file is always in install-tim AddressablesAssetPack (if split binary is on),
+            // or in the main APK (if split binary is off). So there is no need to check for core asset packs status before accessing it.
             var www = UnityWebRequest.Get(CustomAssetPackUtility.CustomAssetPacksDataRuntimePath);
             www.SendWebRequest().completed += (op) =>
             {
                 var www = (op as UnityWebRequestAsyncOperation).webRequest;
                 if (www.result != UnityWebRequest.Result.Success)
+                {
                     CompleteOverride($"Could not load '{CustomAssetPackUtility.kCustomAssetPackDataFilename}' : {www.error}.");
+                }
                 else
                 {
                     InitializeBundleToAssetPackMap(www.downloadHandler.text);
@@ -147,32 +140,6 @@ namespace AddressablesPlayAssetDelivery
                 {
                     PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.Add(bundle, entry);
                 }
-            }
-        }
-
-        void CheckDownloadStatus(AndroidAssetPackInfo info)
-        {
-            if (info.status == AndroidAssetPackStatus.Failed)
-                CompleteOverride($"Failed to retrieve the state of asset pack '{info.name}'.");
-            else if (info.status == AndroidAssetPackStatus.Unknown)
-                CompleteOverride($"Asset pack '{info.name}' is unavailable for this application. This can occur if the app was not installed through Google Play.");
-            else if (info.status == AndroidAssetPackStatus.Canceled)
-                CompleteOverride($"Cancelled asset pack download request '{info.name}'.");
-            else if (info.status == AndroidAssetPackStatus.WaitingForWifi)
-            {
-                AndroidAssetPacks.RequestToUseMobileDataAsync(result =>
-                {
-                    if (!result.allowed)
-                        CompleteOverride("Request to use mobile data was denied.");
-                });
-            }
-            else if (info.status == AndroidAssetPackStatus.Completed)
-            {
-                var assetPackPath = AndroidAssetPacks.GetAssetPackPath(info.name);
-                if (string.IsNullOrEmpty(assetPackPath))
-                    CompleteOverride($"Downloaded asset pack '{info.name}' but cannot locate it on device.");
-                else if (AndroidAssetPacks.coreUnityAssetPacksDownloaded)
-                    DownloadCustomAssetPacksData();
             }
         }
 

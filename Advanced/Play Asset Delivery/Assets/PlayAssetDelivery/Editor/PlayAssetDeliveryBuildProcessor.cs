@@ -30,6 +30,22 @@ namespace AddressablesPlayAssetDelivery.Editor
 
         static internal int DataBuilderIndex { get; set; } = 0;
 
+        T CreateScriptAsset<T>(string subfolder) where T : ScriptableObject
+        {
+            var script = ScriptableObject.CreateInstance<T>();
+            var path = Path.Combine(AddressableAssetSettingsDefaultObject.Settings.ConfigFolder, subfolder);
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+            path = Path.Combine(path, $"{typeof(T).Name}.asset");
+            if (!File.Exists(path))
+            {
+                AssetDatabase.CreateAsset(script, path);
+            }
+            return AssetDatabase.LoadAssetAtPath<T>(path);
+        }
+
         /// <summary>
         /// Invoked before performing a Player build. Moves AssetBundles to their correct data location based on the build target platform.
         /// </summary>
@@ -44,11 +60,20 @@ namespace AddressablesPlayAssetDelivery.Editor
             // need to check that Addressables are built for Android
             if (TextureCompressionProcessor.UseCustomAssetPacks)
             {
+                if (AddressableAssetSettingsDefaultObject.Settings.InitializationObjects.FindIndex(i => i is PlayAssetDeliveryInitializationSettings) == -1)
+                {
+                    // add PlayAssetDeliveryInitialization script asset if required
+                    AddressableAssetSettingsDefaultObject.Settings.AddInitializationObject(CreateScriptAsset<PlayAssetDeliveryInitializationSettings>("InitObjects"));
+                }
                 DataBuilderIndex = AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex;
                 var padBuildScriptIndex = AddressableAssetSettingsDefaultObject.Settings.DataBuilders.FindIndex(b => b is BuildScriptPlayAssetDelivery);
                 if (padBuildScriptIndex == -1)
                 {
-                    // TODO handle situation when PAD build script is not available
+                    // add BuildScriptPlayAssetDelivery script asset if required
+                    // TODO if this script asset is not added, then this script is not available for manual build from Addressables Groups window
+                    // TODO consider moving this code to where it can be called automatically once package is installed
+                    AddressableAssetSettingsDefaultObject.Settings.AddDataBuilder(CreateScriptAsset<BuildScriptPlayAssetDelivery>("DataBuilders"));
+                    padBuildScriptIndex = AddressableAssetSettingsDefaultObject.Settings.DataBuilders.Count - 1;
                 }
                 AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex = padBuildScriptIndex;
                 BuildingPlayer = true;
@@ -283,6 +308,22 @@ namespace AddressablesPlayAssetDelivery.Editor
             // TODO probably need to check here that bundles exist for all TC variants
             PlayAssetDeliveryBuildProcessor.BuildingPlayer = false;
             AddressableAssetSettingsDefaultObject.Settings.ActivePlayerDataBuilderIndex = PlayAssetDeliveryBuildProcessor.DataBuilderIndex;
+
+            // Add TC files which remain in Addressables.BuildPath (groups with delivery type set to "None") to Streaming Assets
+            if (TextureCompressionProcessor.EnabledTextureCompressionTargeting)
+            {
+                foreach (var textureCompression in PlayerSettings.Android.textureCompressionFormats)
+                {
+                    var postfix = TextureCompressionProcessor.TcfPostfix(textureCompression);
+                    var sourcePath = $"{Addressables.BuildPath}{postfix}";
+                    if (!Directory.Exists(sourcePath))
+                    {
+                        // using default texture compression variant
+                        sourcePath = Addressables.BuildPath;
+                    }
+                    buildPlayerContext.AddAdditionalPathToStreamingAssets(sourcePath, $"{Addressables.StreamingAssetsSubFolder}{postfix}");
+                }
+            }
         }
 
         public void OnPostGenerateGradleAndroidProject(string path)
