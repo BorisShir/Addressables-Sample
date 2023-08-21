@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Android;
 using UnityEngine.ResourceManagement.ResourceLocations;
@@ -12,8 +14,33 @@ namespace AddressablesPlayAssetDelivery
     /// Ensures that the asset pack containing the AssetBundle is installed/downloaded before attemping to load the bundle.
     /// </summary>
     [DisplayName("Play Asset Delivery Provider")]
-    public class PlayAssetDeliveryAssetBundleProvider : AssetBundleProvider
+    public class PlayAssetDeliveryAssetBundleProvider : ResourceProviderBase
     {
+        // parts of the code are copied from AssetBundleProvider, this is required to avoid calling Transform func when caching asset bundles
+        // otherwise Transform method returns different results before asset pack is installed and after
+
+        private static Dictionary<string, AssetBundleUnloadOperation> m_UnloadingBundles = new Dictionary<string, AssetBundleUnloadOperation>();
+        /// <summary>
+        /// Stores async operations that unload the requested AssetBundles.
+        /// </summary>
+        protected internal static Dictionary<string, AssetBundleUnloadOperation> UnloadingBundles
+        {
+            get { return m_UnloadingBundles; }
+            internal set { m_UnloadingBundles = value; }
+        }
+
+        internal static int UnloadingAssetBundleCount => m_UnloadingBundles.Count;
+        internal static int AssetBundleCount => AssetBundle.GetAllLoadedAssetBundles().Count() - UnloadingAssetBundleCount;
+        internal static void WaitForAllUnloadingBundlesToComplete()
+        {
+            if (UnloadingAssetBundleCount > 0)
+            {
+                var bundles = m_UnloadingBundles.Values.ToArray();
+                foreach (var b in bundles)
+                    b.WaitForCompletion();
+            }
+        }
+
         ProvideHandle m_ProviderInterface;
         public override void Provide(ProvideHandle providerInterface)
         {
@@ -21,8 +48,24 @@ namespace AddressablesPlayAssetDelivery
             m_ProviderInterface = providerInterface;
             LoadFromAssetPack(providerInterface);
 #else
-            base.Provide(providerInterface);
+            BaseProvide(providerInterface);
 #endif
+        }
+
+        void BaseProvide(ProvideHandle providerInterface)
+        {
+            if (m_UnloadingBundles.TryGetValue(providerInterface.Location.InternalId, out var unloadOp))
+            {
+                if (unloadOp.isDone)
+                    unloadOp = null;
+            }
+            new AssetBundleResource().Start(providerInterface, unloadOp);
+        }
+
+        /// <inheritdoc/>
+        public override Type GetDefaultType(IResourceLocation location)
+        {
+            return typeof(IAssetBundleResource);
         }
 
         void LoadFromAssetPack(ProvideHandle providerInterface)
@@ -31,7 +74,7 @@ namespace AddressablesPlayAssetDelivery
             if (!PlayAssetDeliveryRuntimeData.Instance.BundleNameToAssetPack.ContainsKey(bundleName))
             {
                 // Bundle is either assigned to the generated asset packs, or not assigned to any asset pack
-                base.Provide(providerInterface);
+                BaseProvide(providerInterface);
             }
             else
             {
@@ -40,7 +83,7 @@ namespace AddressablesPlayAssetDelivery
                 if (PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.ContainsKey(assetPackName))
                 {
                     // Asset pack is already downloaded
-                    base.Provide(providerInterface);
+                    BaseProvide(providerInterface);
                 }
                 else
                 {
@@ -52,8 +95,26 @@ namespace AddressablesPlayAssetDelivery
 
         public override void Release(IResourceLocation location, object asset)
         {
-            base.Release(location, asset);
             m_ProviderInterface = default;
+
+            if (location == null)
+                throw new ArgumentNullException("location");
+            if (asset == null)
+            {
+                Debug.LogWarningFormat("Releasing null asset bundle from location {0}.  This is an indication that the bundle failed to load.", location);
+                return;
+            }
+
+            var bundle = asset as AssetBundleResource;
+            if (bundle != null)
+            {
+                if (bundle.Unload(out var unloadOp))
+                {
+                    m_UnloadingBundles.Add(location.InternalId, unloadOp);
+                    unloadOp.completed += op => m_UnloadingBundles.Remove(location.InternalId);
+                }
+                return;
+            }
         }
 
         void DownloadRemoteAssetPack(string assetPackName)
@@ -90,7 +151,7 @@ namespace AddressablesPlayAssetDelivery
                 {
                     // Asset pack was located on device. Proceed with loading the bundle.
                     PlayAssetDeliveryRuntimeData.Instance.AssetPackNameToDownloadPath.Add(info.name, assetPackPath);
-                    base.Provide(m_ProviderInterface);
+                    BaseProvide(m_ProviderInterface);
                 }
                 else
                     message = $"Downloaded asset pack '{info.name}' but cannot locate it on device.";

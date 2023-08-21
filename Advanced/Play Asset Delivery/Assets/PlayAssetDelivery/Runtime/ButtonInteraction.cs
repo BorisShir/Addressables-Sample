@@ -36,7 +36,10 @@ namespace AddressablesPlayAssetDelivery
         IEnumerator Instantiate()
         {
             isLoading = true;
-            AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync(reference, parent);
+            // Force addressing asset bundle for the second time
+            var handleDep = Addressables.DownloadDependenciesAsync(reference);
+            yield return handleDep;
+            var handle = Addressables.InstantiateAsync(reference, parent);
             yield return handle;
             obj = handle.Result;
             isLoading = false;
