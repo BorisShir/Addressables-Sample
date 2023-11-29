@@ -170,15 +170,7 @@ namespace AddressablesPlayAssetDelivery.Editor
             if (!AssetDatabase.IsValidFolder(path))
                 AssetDatabase.CreateFolder(CustomAssetPackUtility.PackContentRootDirectory, folderName);
 
-            var assetNames = CustomAssetPackUtility.CustomAssetPacksAssetsPath.Split('/');
-            var assetPath = path;
-            foreach (var assetName in assetNames)
-            {
-                var newPath = Path.Combine(assetPath, assetName);
-                if (!AssetDatabase.IsValidFolder(newPath))
-                    AssetDatabase.CreateFolder(assetPath, assetName);
-                assetPath = newPath;
-            }
+            Directory.CreateDirectory(Path.Combine(path, CustomAssetPackUtility.CustomAssetPacksAssetsPath));
             return path;
         }
 

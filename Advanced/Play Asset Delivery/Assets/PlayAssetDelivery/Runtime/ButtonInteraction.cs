@@ -36,9 +36,12 @@ namespace AddressablesPlayAssetDelivery
         IEnumerator Instantiate()
         {
             isLoading = true;
+
             // Force addressing asset bundle for the second time
+            // Required only to demonstrate problem when inheriting PlayAssetDeliveryAssetBundleProvider from AssetBundleProvider 
             var handleDep = Addressables.DownloadDependenciesAsync(reference);
             yield return handleDep;
+
             var handle = Addressables.InstantiateAsync(reference, parent);
             yield return handle;
             obj = handle.Result;
