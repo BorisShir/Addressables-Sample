@@ -130,7 +130,7 @@ This sample shows how to create custom AnalyzeRules for use within the Analyze w
 #### *Advanced/Play Asset Delivery*
 An example project that shows how to use [Unity's Play Asset Delivery API](https://docs.unity3d.com/Manual/play-asset-delivery.html) with Addressables. SampleScene (located in 'Assets/Scenes') contains 3 buttons that will load or unload an asset assigned to a specific delivery type.
 
-**Note**: [Play Asset Delivery](https://docs.unity3d.com/Manual/play-asset-delivery.html) requires Unity 2019.4+. This project uses Unity 2020.3.15f2.
+**Note**: [Play Asset Delivery](https://docs.unity3d.com/Manual/play-asset-delivery.html) requires Unity 2021.3+. This project uses Unity 2022.3.10f1.
 
 Use this project as a guide to make [custom asset packs](https://docs.unity3d.com/Manual/play-asset-delivery.html#custom-asset-packs). If you don't want to use custom asset packs, follow the instructions in [Play Asset Delivery](https://docs.unity3d.com/Manual/play-asset-delivery.html) to use the Play Asset Delivery API with the default Addressables configuration.
 
